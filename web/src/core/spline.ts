@@ -40,19 +40,18 @@ export function naturalSpline(xs: number[], ys: number[]): (x: number) => number
     b[j] = (y[j + 1] - y[j]) / h[j] - (h[j] * (c[j + 1] + 2 * c[j])) / 3;
     d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
   }
+  const hl = h[n - 2];
+  const slopeEnd = b[n - 2] + 2 * c[n - 2] * hl + 3 * d[n - 2] * hl * hl;
   return (v: number) => {
-    // Outside the data the boundary polynomials are extended.
+    // Outside the data the spline is extended linearly (second derivative 0 at the ends), as in SSJ.
+    if (v <= x[0]) return y[0] + b[0] * (v - x[0]);
+    if (v >= x[n - 1]) return y[n - 1] + slopeEnd * (v - x[n - 1]);
     let i = 0;
-    if (v >= x[n - 1]) i = n - 2;
-    else if (v > x[0]) {
-      let lo = 0;
-      let hi = n - 1;
-      while (hi - lo > 1) {
-        const mid = (lo + hi) >> 1;
-        if (x[mid] <= v) lo = mid;
-        else hi = mid;
-      }
-      i = lo;
+    let hi = n - 1;
+    while (hi - i > 1) {
+      const mid = (i + hi) >> 1;
+      if (x[mid] <= v) i = mid;
+      else hi = mid;
     }
     const dx = v - x[i];
     return y[i] + b[i] * dx + c[i] * dx * dx + d[i] * dx * dx * dx;

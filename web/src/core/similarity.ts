@@ -30,16 +30,21 @@ export function isCoefficient(m: SimilarityMethod): boolean {
   return m !== 'Euclidean distance' && m !== 'Manhattan distance';
 }
 
-/** Number of bands of `a` matched (greedily, one-to-one) by a band of `b` within `tolerance`. */
+/**
+ * Maximum number of one-to-one pairs of bands (one of `a`, one of `b`) whose weights differ by at most
+ * `tolerance`. Scanning both sorted lists is optimal for interval matching, and symmetric.
+ */
 export function commonBands(a: number[], b: number[], tolerance: number): number {
-  const rest = b.slice();
+  const sa = a.filter(Number.isFinite).sort((x, y) => x - y);
+  const sb = b.filter(Number.isFinite).sort((x, y) => x - y);
   let common = 0;
-  for (const v of a) {
-    const i = rest.findIndex((w) => v - tolerance <= w && w <= v + tolerance);
-    if (i >= 0) {
+  for (let i = 0, j = 0; i < sa.length && j < sb.length; ) {
+    if (Math.abs(sa[i] - sb[j]) <= tolerance) {
       common++;
-      rest.splice(i, 1);
-    }
+      i++;
+      j++;
+    } else if (sa[i] < sb[j]) i++;
+    else j++;
   }
   return common;
 }
@@ -72,8 +77,8 @@ function pearson(x: number[], y: number[]): number {
     syy += y[i] * y[i];
     sxy += x[i] * y[i];
   }
-  const den = Math.sqrt(sxx - (sx * sx) / n) * Math.sqrt(syy - (sy * sy) / n);
-  return den > 0 ? (sxy - (sx * sy) / n) / den : 0;
+  const den = Math.sqrt(Math.max(0, sxx - (sx * sx) / n)) * Math.sqrt(Math.max(0, syy - (sy * sy) / n));
+  return den > 0 ? (sxy - (sx * sy) / n) / den : sameValues(x, y) ? 1 : 0;
 }
 
 function cosine(x: number[], y: number[]): number {
@@ -86,7 +91,12 @@ function cosine(x: number[], y: number[]): number {
     sxy += x[i] * y[i];
   }
   const den = Math.sqrt(sxx) * Math.sqrt(syy);
-  return den > 0 ? sxy / den : 0;
+  return den > 0 ? sxy / den : sameValues(x, y) ? 1 : 0;
+}
+
+/** Undefined correlations (flat or empty profiles) count as a perfect match only for identical profiles. */
+function sameValues(x: number[], y: number[]): boolean {
+  return x.every((v, i) => v === y[i]);
 }
 
 export function laneDistance(
@@ -146,9 +156,15 @@ export function laneDistance(
  * the compared lanes (GelJ used the range of the first lane).
  */
 export function mwTolerance(lanes: ComparableLane[], percent: number): number {
-  const all = lanes.flatMap((l) => l.mw);
-  if (all.length === 0) return 0;
-  return ((Math.max(...all) - Math.min(...all)) * percent) / 100;
+  let min = Infinity;
+  let max = -Infinity;
+  for (const l of lanes)
+    for (const v of l.mw) {
+      if (!Number.isFinite(v)) continue;
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+  return max >= min ? ((max - min) * percent) / 100 : 0;
 }
 
 export function distanceMatrix(method: SimilarityMethod, lanes: ComparableLane[], tolerance: number): number[][] {
@@ -156,11 +172,8 @@ export function distanceMatrix(method: SimilarityMethod, lanes: ComparableLane[]
   const d = Array.from({ length: n }, () => new Array<number>(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      // Band-matching is not symmetric with a greedy match; average both directions.
-      const v =
-        isBandBased(method)
-          ? (laneDistance(method, lanes[i], lanes[j], tolerance) + laneDistance(method, lanes[j], lanes[i], tolerance)) / 2
-          : laneDistance(method, lanes[i], lanes[j], tolerance);
+      // Every measure is symmetric (band matching included), so each pair is computed once.
+      const v = laneDistance(method, lanes[i], lanes[j], tolerance);
       d[i][j] = v;
       d[j][i] = v;
     }

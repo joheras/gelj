@@ -5,7 +5,7 @@
 // 2. Each lane is resized to the size of the marker reference lane and warped
 //    with a cubic spline so that its marker bands land on the reference positions.
 // 3. Band positions are converted to molecular weights with the marker's migration model.
-import { fitCurve } from './curvefit';
+import { fitCurve, type FitResult } from './curvefit';
 import { createImage, crop, resize, rowProfile, signalFn } from './image';
 import { naturalSpline } from './spline';
 import type { GrayImage, Lane, Marker } from './types';
@@ -36,6 +36,27 @@ export function markerPositionsFor(marker: Marker, mws: number[]): number[] {
 
 export function migrationModel(marker: Marker) {
   return fitCurve(marker.refPositions, marker.mw, marker.fitMethod);
+}
+
+/**
+ * Molecular weight at position `pos` of the marker reference lane. Uses the migration model, except where
+ * it is undefined or not positive (e.g. log models beyond the last marker band), where the weight is
+ * interpolated log-linearly between the marker bands (extrapolated from the nearest pair).
+ */
+export function molecularWeight(model: FitResult, marker: Marker, pos: number): number {
+  const v = model.evaluate(pos);
+  if (Number.isFinite(v) && v > 0) return v;
+  const pts = marker.refPositions
+    .map((p, i) => [p, Math.log(marker.mw[i])] as const)
+    .filter(([p, l]) => Number.isFinite(p) && Number.isFinite(l))
+    .sort((a, b) => a[0] - b[0]);
+  if (pts.length === 0) return NaN;
+  if (pts.length === 1) return Math.exp(pts[0][1]);
+  let i = 0;
+  while (i < pts.length - 2 && pos > pts[i + 1][0]) i++;
+  const [p0, l0] = pts[i];
+  const [p1, l1] = pts[i + 1];
+  return Math.exp(p1 === p0 ? l0 : l0 + ((l1 - l0) * (pos - p0)) / (p1 - p0));
 }
 
 /** Absolute y of each marker band at the centre of `lane`, interpolated from the reference lanes. */
@@ -109,7 +130,7 @@ export function normaliseLanes(
     }
 
     const positions = lane.bands.map((b) => b * sf + shift(b * sf));
-    const mw = lane.isReference ? referenceMw.slice() : positions.map((p) => model.evaluate(p));
+    const mw = lane.isReference ? referenceMw.slice() : positions.map((p) => molecularWeight(model, marker, p));
     return {
       laneId: lane.id,
       image: warped,

@@ -18,10 +18,12 @@ export function cluster(dist: number[][], linkage: Linkage): ClusterNode {
   // Squared distances for centroid and Ward (Lance-Williams formulation).
   const squared = linkage === 'UPGMC' || linkage === 'Ward';
   const D = dist.map((row) => row.map((v) => (squared ? v * v : v)));
-  let nodes: (ClusterNode & { members: number[] })[] = dist.map((_, i) => ({ index: i, height: 0, size: 1, members: [i] }));
+  const nodes: ClusterNode[] = dist.map((_, i) => ({ index: i, height: 0, size: 1 }));
   let active = nodes.map((_, i) => i);
-  // Sum of the pairwise distances within each cluster (for mean linkage).
-  const within = new Map<number, number>(active.map((i) => [i, 0]));
+  // Mean linkage: sum of the pairwise distances within each cluster and between every two clusters.
+  const mean = linkage === 'Mean linkage';
+  const within = new Array<number>(n).fill(0);
+  const cross = mean ? dist.map((row) => row.slice()) : [];
 
   while (active.length > 1) {
     let bi = 0;
@@ -42,14 +44,7 @@ export function cluster(dist: number[][], linkage: Linkage): ClusterNode {
     const ni = nodes[i].size;
     const nj = nodes[j].size;
     const height = squared ? Math.sqrt(Math.max(0, best)) : best;
-    const merged = {
-      index: -1,
-      height,
-      size: ni + nj,
-      left: nodes[i],
-      right: nodes[j],
-      members: [...nodes[i].members, ...nodes[j].members],
-    };
+    const merged: ClusterNode = { index: -1, height, size: ni + nj, left: nodes[i], right: nodes[j] };
     // Reuse slot i for the merged cluster.
     for (const k of active) {
       if (k === i || k === j) continue;
@@ -75,32 +70,26 @@ export function cluster(dist: number[][], linkage: Linkage): ClusterNode {
           break;
         default: {
           // Mean linkage (as in Weka): mean of all pairwise distances inside the union.
-          const members = [...merged.members, ...nodes[k].members];
-          const m = members.length;
-          const total = (within.get(i) ?? 0) + (within.get(j) ?? 0) + (within.get(k) ?? 0) + crossSum(dist, merged.members, nodes[k].members) + crossSum(dist, nodes[i].members, nodes[j].members);
+          const m = ni + nj + nk;
+          const total = within[i] + within[j] + within[k] + cross[i][j] + cross[i][k] + cross[j][k];
           v = total / ((m * (m - 1)) / 2);
         }
       }
       D[i][k] = v;
       D[k][i] = v;
     }
-    within.set(i, (within.get(i) ?? 0) + (within.get(j) ?? 0) + crossSum(dist, nodes[i].members, nodes[j].members));
-    nodes = nodes.slice();
+    if (mean) {
+      within[i] += within[j] + cross[i][j];
+      for (const k of active) {
+        if (k === i || k === j) continue;
+        cross[i][k] += cross[j][k];
+        cross[k][i] = cross[i][k];
+      }
+    }
     nodes[i] = merged;
     active = active.filter((k) => k !== j);
   }
-  return stripMembers(nodes[active[0]]);
-}
-
-function crossSum(dist: number[][], a: number[], b: number[]): number {
-  let s = 0;
-  for (const i of a) for (const j of b) s += dist[i][j];
-  return s;
-}
-
-function stripMembers(node: ClusterNode & { members?: number[] }): ClusterNode {
-  const { index, height, size, left, right } = node;
-  return { index, height, size, left: left && stripMembers(left), right: right && stripMembers(right) };
+  return nodes[active[0]];
 }
 
 export function leafOrder(node: ClusterNode): number[] {
