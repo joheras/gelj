@@ -1,0 +1,10 @@
+/dist/
+/nbproject/private/
+/build/
+# GelJ Web
+/web/node_modules/
+/web/dist/
+
+# Local logs and tooling
+*.log
+/.claude/
