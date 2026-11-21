@@ -1,0 +1,61 @@
+# GelJ Web
+
+Browser version of **GelJ**, a tool for analysing DNA fingerprint gel images. It runs entirely in the
+user's browser (no server): images and results are kept in the browser's IndexedDB and can be exported
+as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
+
+## Features
+
+- **Assistant** with GelJ's four steps:
+  1. Pre-processing: crop, invert, automatic/manual brightness and contrast, flip and rotate.
+  2. Lane detection from the minima of the horizontal intensity profile, with manual editing
+     (add, move, resize, delete) and selection of reference (marker) lanes.
+  3. Normalisation: marker band detection (per-marker threshold) and manual picking, choice of an existing
+     marker or definition of a new one, and migration model (ImageJ curve-fitter models). Marker
+     positions are interpolated across the gel and every lane is warped onto the marker reference with a
+     cubic spline.
+  4. Band detection (global and per-lane threshold) and manual band picking.
+- Drafts can be saved and resumed; completed experiments can be re-edited.
+- **Comparison** of lanes from any experiments: Dice, Jaccard, band difference, Jeffrey's X and Ochiai
+  (with a tolerance) or Pearson, cosine, Euclidean and Manhattan on densitometric curves; UPGMA, UPGMC,
+  single, complete, mean and Ward linkage. Output: dendrogram (+ normalised lane images + band diagram +
+  metadata), similarity matrix, cophenetic correlation. Exports: SVG, PNG, Newick, CSV.
+- **Markers** shipped with GelJ plus user-defined markers.
+- Opens TIFF (8/16-bit), PNG, JPEG, GIF, BMP and WebP images.
+
+## Development
+
+Requires Node.js ≥ 20.
+
+```bash
+npm install
+npm run dev      # development server
+npm test         # unit tests of the algorithms (src/core)
+npm run build    # static build in dist/
+```
+
+## Project layout
+
+- `src/core/` — algorithms ported from the Java version, independent of the UI:
+  image operations, peak finding (ImageJ `MaximumFinder`), lane/band detection, curve fitting,
+  spline, normalisation, similarity measures and clustering.
+- `src/storage/` — IndexedDB persistence and JSON import/export.
+- `src/ui/` — React interface.
+
+## Deployment on GitHub Pages
+
+The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds this folder and publishes
+`dist/` on every push to `main`/`master` that touches `web/`. In the repository settings, set
+**Pages → Build and deployment → Source** to **GitHub Actions**. The build uses relative paths
+(`base: './'`), so it works under any `https://<user>.github.io/<repo>/` URL.
+
+## Differences from the desktop version
+
+- Lanes are rectangles (the desktop version used 6-point polygons that were rectangles in practice).
+- Hierarchical clustering uses the Lance–Williams update formulas on the distance matrix; "Mean linkage"
+  is the mean of all pairwise distances in the merged cluster, as in Weka. Results can differ slightly from
+  the modified Weka build used by GelJ, mainly for UPGMC and Ward.
+- The band-matching tolerance is a percentage of the molecular-weight range of all compared lanes (GelJ
+  used the range of the first lane), and matching is symmetrised.
+- Euclidean and Manhattan distances are computed on profiles scaled to [0, 1] and averaged per point.
+- Users, labs, studies and the population-genetics exports (XSLT) of the desktop version are not included.
