@@ -13,13 +13,14 @@ import {
   rotate90,
 } from '../core/image';
 import { NormalisationError, normaliseLanes, validateReferences } from '../core/normalise';
-import type { GrayImage, Lane, Marker, Rect } from '../core/types';
+import type { GrayImage, Lab, Lane, Marker, Rect } from '../core/types';
 import { EMPTY_META } from '../core/types';
 import { uid } from '../core/uid';
 import { listMarkers, saveExperiment, saveMarker } from '../storage/db';
 import { CurveChart, ProfileChart } from './Charts';
 import { encodeNormalised, experimentFromWork, type WorkState } from './experimentio';
 import { GelCanvas, type Point, type PointerKind } from './GelCanvas';
+import { LabSelect } from './Labs';
 
 const STEPS = [
   { id: 'crop', group: 'Step 1. Image preprocessing', label: '1.1 Crop' },
@@ -90,12 +91,13 @@ function isTyping(e: KeyboardEvent): boolean {
 }
 
 interface Props {
+  labs: Lab[];
   initial: WorkState;
   startStep: number;
   onClose: (savedId?: string) => void;
 }
 
-export function Wizard({ initial, startStep, onClose }: Props) {
+export function Wizard({ labs, initial, startStep, onClose }: Props) {
   const [work, setWork] = useState<WorkState>(initial);
   const [stepIndex, setStepIndex] = useState(startStep);
   const [maxStep, setMaxStep] = useState(Math.max(startStep, initial.lanes.length ? 6 : 0));
@@ -1101,6 +1103,10 @@ export function Wizard({ initial, startStep, onClose }: Props) {
             <span>Experiment name</span>
             <input type="text" value={work.name} onChange={(e) => setWork((w) => ({ ...w, name: e.target.value }))} />
           </label>
+          <div className="field">
+            <span className="small muted">Laboratory</span>
+            <LabSelect labs={labs} value={work.labId} onChange={(labId) => setWork((w) => ({ ...w, labId }))} />
+          </div>
           <label className="field">
             <span>Comments</span>
             <textarea rows={2} value={work.comments} onChange={(e) => setWork((w) => ({ ...w, comments: e.target.value }))} />

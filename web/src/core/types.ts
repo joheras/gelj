@@ -75,6 +75,20 @@ export interface NormalisedLane {
   mw: number[];
 }
 
+/** Laboratory where a gel was run (as in GelJ, where each user belonged to a lab). */
+export interface Lab {
+  id: string;
+  name: string;
+  city: string;
+  country: string;
+}
+
+export function labLabel(lab: Lab | undefined | null): string {
+  if (!lab) return '';
+  const place = [lab.city, lab.country].filter(Boolean).join(', ');
+  return place ? `${lab.name} (${place})` : lab.name;
+}
+
 export type ExperimentStatus = 'draft' | 'complete';
 
 export interface Experiment {
@@ -99,6 +113,8 @@ export interface Experiment {
   lanes: Lane[];
   normalised: NormalisedLane[];
   bandColour: string;
+  /** Laboratory of the experiment (absent in data created before labs existed). */
+  labId?: string | null;
 }
 
 export type SimilarityMethod =
@@ -127,6 +143,6 @@ export interface Comparison {
   /** Tolerance as a percentage of the molecular-weight range. */
   tolerance: number;
   output: OutputMode;
-  fields: (keyof LaneMeta | 'experiment' | 'lane')[];
+  fields: (keyof LaneMeta | 'experiment' | 'lane' | 'lab')[];
   comments: string;
 }

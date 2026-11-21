@@ -1,38 +1,43 @@
 import { useState } from 'react';
-import type { Experiment, Lane, Marker } from '../core/types';
+import { labLabel, type Experiment, type Lab, type Lane, type Marker } from '../core/types';
 import { saveExperiment } from '../storage/db';
 import { downloadText, safeFilename } from './imageio';
+import { LabSelect } from './Labs';
 import { LaneMetaEditor } from './Wizard';
 
 interface Props {
   experiment: Experiment;
   markers: Marker[];
+  labs: Lab[];
   onBack: () => void;
   onEdit: () => void;
   notify: (msg: string) => void;
 }
 
-export function ExperimentView({ experiment, markers, onBack, onEdit, notify }: Props) {
+export function ExperimentView({ experiment, markers, labs, onBack, onEdit, notify }: Props) {
   const [lanes, setLanes] = useState<Lane[]>(experiment.lanes);
   const [name, setName] = useState(experiment.name);
   const [comments, setComments] = useState(experiment.comments);
-  const dirty = lanes !== experiment.lanes || name !== experiment.name || comments !== experiment.comments;
+  const [labId, setLabId] = useState<string | null>(experiment.labId ?? null);
+  const dirty =
+    lanes !== experiment.lanes || name !== experiment.name || comments !== experiment.comments || labId !== (experiment.labId ?? null);
+  const lab = labs.find((l) => l.id === labId);
   const marker = markers.find((m) => m.id === experiment.markerId);
   const H = 360;
 
   const save = async () => {
-    await saveExperiment({ ...experiment, name: name.trim() || experiment.name, comments, lanes });
+    await saveExperiment({ ...experiment, name: name.trim() || experiment.name, comments, lanes, labId });
     notify('Experiment saved.');
   };
 
   const exportBands = () => {
     const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
-    const rows = [['lane', 'reference', 'strain', 'genus', 'species', 'country', 'mlst', 'band', 'position', 'molecular_weight'].join(',')];
+    const rows = [['laboratory', 'city', 'country', 'lane', 'reference', 'strain', 'genus', 'species', 'country', 'mlst', 'band', 'position', 'molecular_weight'].join(',')];
     for (const l of lanes) {
       const n = experiment.normalised.find((x) => x.laneId === l.id);
       n?.mw.forEach((mw, i) =>
         rows.push(
-          [q(l.name), l.isReference, q(l.meta.strain), q(l.meta.genus), q(l.meta.species), q(l.meta.country), q(l.meta.mlst), i + 1, n.positions[i].toFixed(2), mw.toFixed(3)].join(','),
+          [q(lab?.name ?? ''), q(lab?.city ?? ''), q(lab?.country ?? ''), q(l.name), l.isReference, q(l.meta.strain), q(l.meta.genus), q(l.meta.species), q(l.meta.country), q(l.meta.mlst), i + 1, n.positions[i].toFixed(2), mw.toFixed(3)].join(','),
         ),
       );
     }
@@ -62,12 +67,21 @@ export function ExperimentView({ experiment, markers, onBack, onEdit, notify }: 
               <span>Name</span>
               <input type="text" value={name} onChange={(e) => setName(e.target.value)} />
             </label>
+            <div className="field" style={{ flex: 1, minWidth: 240 }}>
+              <span className="small muted">Laboratory</span>
+              <LabSelect labs={labs} value={labId} onChange={setLabId} />
+            </div>
             <label className="field" style={{ flex: 2, minWidth: 260 }}>
               <span>Comments</span>
               <input type="text" value={comments} onChange={(e) => setComments(e.target.value)} />
             </label>
           </div>
           <div className="small muted">
+            {lab && (
+              <>
+                Laboratory: <b>{labLabel(lab)}</b> ·{' '}
+              </>
+            )}
             Marker: <b>{marker?.name ?? 'unknown'}</b> · {experiment.lanes.length} lanes · {experiment.darkBackground ? 'dark' : 'light'}{' '}
             background · created {new Date(experiment.createdAt).toLocaleDateString()}
           </div>

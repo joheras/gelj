@@ -16,9 +16,10 @@ export interface WorkState {
   markerId: string | null;
   referenceMw: number[];
   bandColour: string;
+  labId: string | null;
 }
 
-export function newWork(image: GrayImage, name: string): WorkState {
+export function newWork(image: GrayImage, name: string, labId: string | null = null): WorkState {
   return {
     id: uid(),
     name,
@@ -31,6 +32,7 @@ export function newWork(image: GrayImage, name: string): WorkState {
     markerId: null,
     referenceMw: [],
     bandColour: '#2f7dff',
+    labId,
   };
 }
 
@@ -48,6 +50,7 @@ export async function workFromExperiment(e: Experiment): Promise<WorkState> {
     markerId: e.markerId,
     referenceMw: e.referenceMw,
     bandColour: e.bandColour,
+    labId: e.labId ?? null,
   };
 }
 
@@ -75,6 +78,7 @@ export function experimentFromWork(
     lanes: w.lanes,
     normalised,
     bandColour: w.bandColour,
+    labId: w.labId,
   };
 }
 

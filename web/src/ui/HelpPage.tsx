@@ -33,6 +33,10 @@ export function HelpPage() {
               manually if needed.
             </li>
             <li>
+              <b>Laboratory</b> — in the last step (or later, from the experiment page) record the laboratory where the gel was run. Manage
+              laboratories in the <i>Labs</i> section; the one marked as <i>my lab</i> is preselected for new experiments.
+            </li>
+            <li>
               <b>Comparison</b> — select lanes from any experiment and build a dendrogram with band-based coefficients (Dice, Jaccard,
               Ochiai, Jeffrey&apos;s X, band difference, with a tolerance) or curve-based measures (Pearson, cosine, Euclidean, Manhattan) and
               UPGMA, UPGMC, single, complete, mean or Ward linkage.

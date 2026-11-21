@@ -2,7 +2,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
 import { cluster, copheneticCorrelation, leafOrder, LINKAGES, toNewick, type ClusterNode } from '../core/cluster';
 import { rotate90 } from '../core/image';
 import { distanceMatrix, isBandBased, isCoefficient, mwTolerance, SIMILARITY_METHODS } from '../core/similarity';
-import type { Comparison, Experiment, Lane, Linkage, NormalisedLane, OutputMode, SimilarityMethod } from '../core/types';
+import type { Comparison, Experiment, Lab, Lane, Linkage, NormalisedLane, OutputMode, SimilarityMethod } from '../core/types';
 import { uid } from '../core/uid';
 import { deleteComparison, listComparisons, saveComparison } from '../storage/db';
 import { Dendrogram, type DendroLeaf } from './Dendrogram';
@@ -14,6 +14,7 @@ type Field = Comparison['fields'][number];
 const FIELDS: [Field, string][] = [
   ['lane', 'Lane'],
   ['experiment', 'Experiment'],
+  ['lab', 'Laboratory'],
   ['strain', 'Strain number'],
   ['genus', 'Genus'],
   ['species', 'Species'],
@@ -32,6 +33,7 @@ const OUTPUTS: [OutputMode, string][] = [
 interface Entry {
   key: string;
   exp: Experiment;
+  lab?: Lab;
   lane: Lane;
   norm: NormalisedLane;
 }
@@ -52,6 +54,7 @@ interface Result {
 function fieldValue(e: Entry, f: Field): string {
   if (f === 'lane') return e.lane.name;
   if (f === 'experiment') return e.exp.name;
+  if (f === 'lab') return e.lab?.name ?? '';
   return e.lane.meta[f];
 }
 
@@ -65,18 +68,18 @@ async function rotatedLaneImage(n: NormalisedLane): Promise<string> {
   return url;
 }
 
-export function ComparePage({ experiments }: { experiments: Experiment[] }) {
+export function ComparePage({ experiments, labs }: { experiments: Experiment[]; labs: Lab[] }) {
   const complete = useMemo(() => experiments.filter((e) => e.status === 'complete'), [experiments]);
   const entries = useMemo(() => {
     const out: Entry[] = [];
     for (const exp of complete) {
       for (const lane of exp.lanes) {
         const norm = exp.normalised.find((n) => n.laneId === lane.id);
-        if (norm) out.push({ key: `${exp.id}/${lane.id}`, exp, lane, norm });
+        if (norm) out.push({ key: `${exp.id}/${lane.id}`, exp, lane, norm, lab: labs.find((l) => l.id === exp.labId) });
       }
     }
     return out;
-  }, [complete]);
+  }, [complete, labs]);
 
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState('');
@@ -101,7 +104,7 @@ export function ComparePage({ experiments }: { experiments: Experiment[] }) {
   const visible = entries.filter((e) => {
     if (!showRefs && e.lane.isReference) return false;
     if (!filter.trim()) return true;
-    const hay = [e.exp.name, e.lane.name, ...Object.values(e.lane.meta)].join(' ').toLowerCase();
+    const hay = [e.exp.name, e.lane.name, e.lab?.name, e.lab?.city, e.lab?.country, ...Object.values(e.lane.meta)].join(' ').toLowerCase();
     return filter
       .toLowerCase()
       .split(/\s+/)
@@ -248,7 +251,7 @@ export function ComparePage({ experiments }: { experiments: Experiment[] }) {
           <div className="card stack">
             <h3>1. Lanes</h3>
             <div className="row">
-              <input type="search" placeholder="Filter by name, strain, species…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: 1 }} />
+              <input type="search" placeholder="Filter by name, strain, species, laboratory…" value={filter} onChange={(e) => setFilter(e.target.value)} style={{ flex: 1 }} />
             </div>
             <div className="row small">
               <button onClick={() => toggle(visible.map((e) => e.key), true)}>Select visible</button>
@@ -276,7 +279,10 @@ export function ComparePage({ experiments }: { experiments: Experiment[] }) {
                               onChange={(e) => toggle(list.map((x) => x.key), e.target.checked)}
                             />
                           </td>
-                          <td colSpan={3}>{list[0].exp.name}</td>
+                          <td colSpan={3}>
+                            {list[0].exp.name}
+                            {list[0].lab && <span className="muted" style={{ fontWeight: 400 }}> · {list[0].lab.name}</span>}
+                          </td>
                         </tr>
                         {list.map((e) => (
                           <tr key={e.key}>

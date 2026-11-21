@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import type { Experiment, Marker } from './core/types';
-import { listExperiments, listMarkers, onChange } from './storage/db';
+import type { Experiment, Lab, Marker } from './core/types';
+import { getDefaultLabId, listExperiments, listLabs, listMarkers, onChange } from './storage/db';
 import { ComparePage } from './ui/ComparePage';
 import { workFromExperiment, type WorkState } from './ui/experimentio';
 import { ExperimentsPage } from './ui/ExperimentsPage';
 import { ExperimentView } from './ui/ExperimentView';
 import { HelpPage } from './ui/HelpPage';
+import { LabsPage } from './ui/Labs';
 import { MarkersPage } from './ui/MarkersPage';
 import { STEP_COUNT, Wizard } from './ui/Wizard';
 
@@ -15,18 +16,20 @@ type Route =
   | { page: 'wizard'; work: WorkState; step: number }
   | { page: 'compare' }
   | { page: 'markers' }
+  | { page: 'labs' }
   | { page: 'help' };
 
 const TABS: [Route['page'], string][] = [
   ['experiments', 'Experiments'],
   ['compare', 'Compare'],
   ['markers', 'Markers'],
+  ['labs', 'Labs'],
   ['help', 'Help'],
 ];
 
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
-  if (h === 'compare' || h === 'markers' || h === 'help') return { page: h };
+  if (h === 'compare' || h === 'markers' || h === 'labs' || h === 'help') return { page: h };
   return { page: 'experiments' };
 }
 
@@ -34,13 +37,17 @@ export default function App() {
   const [route, setRoute] = useState<Route>(routeFromHash);
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [markers, setMarkers] = useState<Marker[]>([]);
+  const [labs, setLabs] = useState<Lab[]>([]);
+  const [defaultLabId, setDefaultLab] = useState<string | null>(getDefaultLabId);
   const [toast, setToast] = useState<string | null>(null);
   const [loadingExp, setLoadingExp] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [e, m] = await Promise.all([listExperiments(), listMarkers()]);
+    const [e, m, l] = await Promise.all([listExperiments(), listMarkers(), listLabs()]);
     setExperiments(e);
     setMarkers(m);
+    setLabs(l);
+    setDefaultLab(getDefaultLabId());
   }, []);
 
   useEffect(() => {
@@ -73,7 +80,7 @@ export default function App() {
   const navigate = (page: Route['page']) => {
     if (route.page === 'wizard' && !window.confirm('Leave the assistant? Unsaved changes will be lost.')) return;
     window.location.hash = page === 'experiments' ? '' : page;
-    setRoute(page === 'experiments' || page === 'compare' || page === 'markers' || page === 'help' ? { page } : { page: 'experiments' });
+    setRoute(page === 'experiment' || page === 'wizard' ? { page: 'experiments' } : { page });
   };
 
   const openExperiment = async (e: Experiment, step?: number) => {
@@ -126,6 +133,7 @@ export default function App() {
         <ExperimentsPage
           experiments={experiments}
           markers={markers}
+          labs={labs}
           notify={setToast}
           onNew={(work) => setRoute({ page: 'wizard', work, step: 0 })}
           onOpen={(e) => openExperiment(e)}
@@ -134,6 +142,7 @@ export default function App() {
       {route.page === 'wizard' && (
         <Wizard
           key={route.work.id}
+          labs={labs}
           initial={route.work}
           startStep={route.step}
           onClose={(id) => {
@@ -150,18 +159,20 @@ export default function App() {
               key={current.id + current.updatedAt}
               experiment={current}
               markers={markers}
+              labs={labs}
               notify={setToast}
               onBack={() => navigate('experiments')}
               onEdit={() => openExperiment(current, STEP_COUNT - 2)}
             />
           ) : (
-            <ExperimentsPage experiments={experiments} markers={markers} notify={setToast} onNew={(work) => setRoute({ page: 'wizard', work, step: 0 })} onOpen={(e) => openExperiment(e)} />
+            <ExperimentsPage experiments={experiments} markers={markers} labs={labs} notify={setToast} onNew={(work) => setRoute({ page: 'wizard', work, step: 0 })} onOpen={(e) => openExperiment(e)} />
           )
         ) : (
           <div className="page empty">Loading…</div>
         ))}
-      {route.page === 'compare' && <ComparePage experiments={experiments} />}
+      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} />}
       {route.page === 'markers' && <MarkersPage markers={markers} experiments={experiments} />}
+      {route.page === 'labs' && <LabsPage labs={labs} experiments={experiments} defaultLabId={defaultLabId} />}
       {route.page === 'help' && <HelpPage />}
     </div>
   );

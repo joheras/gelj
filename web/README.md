@@ -21,6 +21,9 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
   single, complete, mean and Ward linkage. Output: dendrogram (+ normalised lane images + band diagram +
   metadata), similarity matrix, cophenetic correlation. Exports: SVG, PNG, Newick, CSV.
 - **Markers** shipped with GelJ plus user-defined markers.
+- **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
+  lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
+  included in the bands CSV and in exports.
 - Opens TIFF (8/16-bit), PNG, JPEG, GIF, BMP and WebP images.
 
 ## Development
@@ -58,4 +61,4 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
 - The band-matching tolerance is a percentage of the molecular-weight range of all compared lanes (GelJ
   used the range of the first lane), and matching is symmetrised.
 - Euclidean and Manhattan distances are computed on profiles scaled to [0, 1] and averaged per point.
-- Users, labs, studies and the population-genetics exports (XSLT) of the desktop version are not included.
+- Users, studies and the population-genetics exports (XSLT) of the desktop version are not included.

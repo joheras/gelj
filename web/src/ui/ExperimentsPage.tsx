@@ -1,20 +1,21 @@
 import { useRef, useState } from 'react';
 import { BUILTIN_MARKERS } from '../core/markers';
 import { SAMPLE_PROFILES, syntheticGel } from '../core/synthetic';
-import type { Experiment, Marker } from '../core/types';
-import { deleteExperiment, exportBackup, importBackup } from '../storage/db';
+import type { Experiment, Lab, Marker } from '../core/types';
+import { deleteExperiment, exportBackup, getDefaultLabId, importBackup } from '../storage/db';
 import { downloadText, fileToGray, safeFilename } from './imageio';
 import { newWork, type WorkState } from './experimentio';
 
 interface Props {
   experiments: Experiment[];
   markers: Marker[];
+  labs: Lab[];
   onNew: (work: WorkState) => void;
   onOpen: (e: Experiment) => void;
   notify: (msg: string) => void;
 }
 
-export function ExperimentsPage({ experiments, markers, onNew, onOpen, notify }: Props) {
+export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, notify }: Props) {
   const fileRef = useRef<HTMLInputElement>(null);
   const importRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
@@ -25,7 +26,7 @@ export function ExperimentsPage({ experiments, markers, onNew, onOpen, notify }:
     setLoading(true);
     try {
       const img = await fileToGray(file);
-      onNew(newWork(img, file.name.replace(/\.[^.]+$/, '')));
+      onNew(newWork(img, file.name.replace(/\.[^.]+$/, ''), defaultLab()));
     } catch (e) {
       setError(`Could not open ${file.name}: ${(e as Error).message}`);
     } finally {
@@ -35,14 +36,19 @@ export function ExperimentsPage({ experiments, markers, onNew, onOpen, notify }:
 
   const sample = () => {
     const gel = syntheticGel(BUILTIN_MARKERS[0], SAMPLE_PROFILES, { seed: Date.now() % 1000 });
-    onNew(newWork(gel.image, 'Sample gel'));
+    onNew(newWork(gel.image, 'Sample gel', defaultLab()));
+  };
+
+  const defaultLab = () => {
+    const id = getDefaultLabId();
+    return labs.some((l) => l.id === id) ? id : null;
   };
 
   const importFile = async (file: File) => {
     setError(null);
     try {
       const res = await importBackup(JSON.parse(await file.text()));
-      notify(`Imported ${res.experiments} experiments, ${res.markers} markers and ${res.comparisons} comparisons.`);
+      notify(`Imported ${res.experiments} experiments, ${res.markers} markers, ${res.labs} laboratories and ${res.comparisons} comparisons.`);
     } catch (e) {
       setError(`Import failed: ${(e as Error).message}`);
     }
@@ -59,6 +65,7 @@ export function ExperimentsPage({ experiments, markers, onNew, onOpen, notify }:
   };
 
   const markerName = (id: string | null) => markers.find((m) => m.id === id)?.name ?? '—';
+  const labName = (id: string | null | undefined) => labs.find((l) => l.id === id)?.name;
 
   return (
     <div className="page">
@@ -131,6 +138,12 @@ export function ExperimentsPage({ experiments, markers, onNew, onOpen, notify }:
                 </div>
                 <div className="small muted">
                   {e.lanes.length} lanes · {markerName(e.markerId)}
+                  {labName(e.labId) && (
+                    <>
+                      <br />
+                      {labName(e.labId)}
+                    </>
+                  )}
                   <br />
                   Updated {new Date(e.updatedAt).toLocaleString()}
                 </div>
