@@ -145,4 +145,6 @@ export interface Comparison {
   output: OutputMode;
   fields: (keyof LaneMeta | 'experiment' | 'lane' | 'lab')[];
   comments: string;
+  /** Dendrogram cut-off defining clusters (% similarity, or distance for distance measures); absent or null = none. */
+  cutoff?: number | null;
 }

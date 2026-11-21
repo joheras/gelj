@@ -7,7 +7,8 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
 ## Features
 
 - **Assistant** with GelJ's four steps:
-  1. Pre-processing: crop, invert, automatic/manual brightness and contrast, flip and rotate.
+  1. Pre-processing: crop, invert, automatic/manual brightness and contrast, flip and rotate, background
+     subtraction (rolling ball, dark or light background), gamma and 3×3 median filter.
   2. Lane detection from the minima of the horizontal intensity profile, with manual editing
      (add, move, resize, delete) and selection of reference (marker) lanes.
   3. Normalisation: marker band detection (per-marker threshold) and manual picking, choice of an existing
@@ -20,6 +21,13 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
   (with a tolerance) or Pearson, cosine, Euclidean and Manhattan on densitometric curves; UPGMA, UPGMC,
   single, complete, mean and Ward linkage. Output: dendrogram (+ normalised lane images + band diagram +
   metadata), similarity matrix, cophenetic correlation. Exports: SVG, PNG, Newick, CSV.
+  - **Cut-off**: cut the dendrogram at a similarity (or distance) level to define clusters (e.g. PFGE
+    pulsotypes); clusters are coloured, listed in a *Cluster* column, exported as CSV and saved with the
+    comparison.
+  - **Bootstrap** support of the branches (band classes or profile points resampled with replacement),
+    shown on the dendrogram and written in the Newick export.
+  - **Band matching**: band classes built with the comparison tolerance and the binary presence/absence
+    matrix, exported as CSV or NEXUS for population-genetics and phylogenetics software.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -41,7 +49,8 @@ npm run build    # static build in dist/
 
 - `src/core/` — algorithms ported from the Java version, independent of the UI:
   image operations, peak finding (ImageJ `MaximumFinder`), lane/band detection, curve fitting,
-  spline, normalisation, similarity measures and clustering.
+  spline, normalisation, similarity measures and clustering, background subtraction and filters,
+  band matching, dendrogram cut-off and bootstrap.
 - `src/storage/` — IndexedDB persistence and JSON import/export.
 - `src/ui/` — React interface.
 
@@ -61,4 +70,12 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
 - The band-matching tolerance is a percentage of the molecular-weight range of all compared lanes (GelJ
   used the range of the first lane), and matching is symmetrised.
 - Euclidean and Manhattan distances are computed on profiles scaled to [0, 1] and averaged per point.
-- Users, studies and the population-genetics exports (XSLT) of the desktop version are not included.
+- Users, studies and the population-genetics exports (XSLT) of the desktop version are not included; the
+  band-matching matrix (CSV/NEXUS) covers the binary data those exports were built on.
+- Background subtraction shrinks the image earlier than ImageJ for large radii (the ball never exceeds
+  8 px on the shrunk image), so results can differ by a few grey levels; ImageJ's options (sliding
+  paraboloid, smoothing, separate background image) are not offered.
+- Cut-off clusters and bootstrap support are not available in the desktop version.
+
+See [docs/comparison.md](docs/comparison.md) for a comparison with GelJ desktop, GelCompar II/BioNumerics,
+PyElph, GelClust, GelAnalyzer, ImageJ/Fiji and GelGenie, and the list of proposed improvements.

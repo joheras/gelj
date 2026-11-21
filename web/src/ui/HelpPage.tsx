@@ -18,7 +18,10 @@ export function HelpPage() {
           <h3>Workflow</h3>
           <ol>
             <li>
-              <b>Image preprocessing</b> — crop, invert, adjust contrast, flip or rotate the image so that lanes are vertical.
+              <b>Image preprocessing</b> — crop, invert, adjust contrast, flip or rotate the image so that lanes are vertical. In{' '}
+              <i>Other operations</i>, <i>Subtract background</i> removes uneven illumination and smears with a rolling ball (tick{' '}
+              <i>Light background</i> for dark bands on a light gel; use a radius at least as large as the widest band); gamma and a 3×3
+              median filter are also available.
             </li>
             <li>
               <b>Lane detection</b> — lanes are detected from the minima of the horizontal intensity profile; add, move, resize or delete
@@ -42,6 +45,27 @@ export function HelpPage() {
               UPGMA, UPGMC, single, complete, mean or Ward linkage.
             </li>
           </ol>
+        </div>
+        <div className="card">
+          <h3>Interpreting a comparison</h3>
+          <ul>
+            <li>
+              <b>Cut-off</b> — tick <i>Cut-off at</i> and give a similarity (e.g. 80% for PFGE pulsotypes) or, for Euclidean and Manhattan,
+              a distance. Lanes joined above the cut-off form a cluster: its branches are coloured and its number appears in the{' '}
+              <i>Cluster</i> column. <i>Clusters CSV</i> exports the assignment; the cut-off is saved with the comparison.
+            </li>
+            <li>
+              <b>Bootstrap</b> — resamples the characters (band classes for band-based measures, profile points for curve-based ones) and
+              rebuilds the tree. The blue number at each branch is the percentage of replicates that contain the same group of lanes; values
+              above about 70% indicate a robust group. Together with the cophenetic correlation it tells how well the dendrogram represents
+              the data.
+            </li>
+            <li>
+              <b>Band matching</b> — groups the bands of all compared lanes into band classes using the tolerance (two bands of the same lane
+              are never in the same class). The table shows which lane has a band in each class; export it as CSV or as a NEXUS 0/1 matrix
+              for PAUP*, SplitsTree, MrBayes, PAST or other population-genetics software.
+            </li>
+          </ul>
         </div>
         <div className="card">
           <h3>Keyboard shortcuts</h3>

@@ -1,11 +1,15 @@
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react';
+import { bandMatrixCsv, bandMatrixNexus, matchBands, type BandMatching } from '../core/bandmatch';
+import { Bootstrap, bootstrapData } from '../core/bootstrap';
 import { cluster, copheneticCorrelation, leafOrder, LINKAGES, toNewick, type ClusterNode } from '../core/cluster';
 import { rotate90 } from '../core/image';
 import { distanceMatrix, isBandBased, isCoefficient, mwTolerance, SIMILARITY_METHODS } from '../core/similarity';
 import type { Comparison, Experiment, Lab, Lane, Linkage, NormalisedLane, OutputMode, SimilarityMethod } from '../core/types';
 import { uid } from '../core/uid';
 import { deleteComparison, listComparisons, saveComparison } from '../storage/db';
-import { Dendrogram, type DendroLeaf } from './Dendrogram';
+import { cutTree, similarityToHeight } from '../core/treecut';
+import { CLUSTER_COLOURS } from './clusterColours';
+import { Dendrogram, type DendroCut, type DendroLeaf } from './Dendrogram';
 import { svgToPngBlob, svgToString } from './svgexport';
 import { dataURLToGray, downloadBlob, downloadText, grayToDataURL, safeFilename } from './imageio';
 
@@ -49,7 +53,12 @@ interface Result {
   leaves: DendroLeaf[];
   headers: string[];
   names: string[];
+  similarity: SimilarityMethod;
+  linkage: Linkage;
+  matching: BandMatching;
 }
+
+const BOOTSTRAP_BATCH = 5;
 
 function fieldValue(e: Entry, f: Field): string {
   if (f === 'lane') return e.lane.name;
@@ -91,7 +100,13 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
   const [fields, setFields] = useState<Field[]>(['lane', 'experiment', 'strain']);
   const [showValues, setShowValues] = useState(false);
   const [result, setResult] = useState<Result | null>(null);
-  const [tab, setTab] = useState<'dendrogram' | 'matrix'>('dendrogram');
+  const [tab, setTab] = useState<'dendrogram' | 'matrix' | 'bands'>('dendrogram');
+  const [cutOn, setCutOn] = useState(false);
+  const [cutoff, setCutoff] = useState(80);
+  const [replicates, setReplicates] = useState(100);
+  const [support, setSupport] = useState<Map<ClusterNode, number> | null>(null);
+  const [bootProgress, setBootProgress] = useState<number | null>(null);
+  const bootToken = useRef(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Comparison[]>([]);
@@ -130,6 +145,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
     const tol = opts?.tolerance ?? tolerance;
     const out = opts?.output ?? output;
     const flds = opts?.fields ?? fields;
+    const cut = opts ? opts.cutoff : cutOn ? cutoff : null;
     const keys = opts?.laneRefs ? new Set(opts.laneRefs) : selected;
     const chosen = entries.filter((e) => keys.has(e.key));
     if (chosen.length < 2) {
@@ -151,6 +167,19 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
       }));
       const headers = flds.map((f) => FIELDS.find(([k]) => k === f)?.[1] ?? f);
       const tolText = isBandBased(sim) ? ` (tol. ${tol}%)` : '';
+      bootToken.current++;
+      setSupport(null);
+      setBootProgress(null);
+      if (cut !== undefined && cut !== null) {
+        setCutOn(true);
+        setCutoff(cut);
+      } else if (opts) {
+        setCutOn(false);
+      }
+      if (!opts && result && isCoefficient(sim) !== result.coefficient) {
+        // The cut-off is a % similarity for coefficients and a distance otherwise.
+        setCutoff(isCoefficient(sim) ? 80 : Number((tree.height / 2).toPrecision(2)));
+      }
       setResult({
         title: `${sim}${tolText} — ${link}`,
         entries: chosen,
@@ -162,6 +191,9 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
         leaves,
         headers,
         names: chosen.map((e) => `${e.exp.name} ${e.lane.name}`),
+        similarity: sim,
+        linkage: link,
+        matching: matchBands(lanes.map((l) => l.mw), tolAbs),
       });
     } catch (e) {
       setError((e as Error).message);
@@ -194,12 +226,67 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
       output,
       fields,
       comments: '',
+      cutoff: cutOn ? cutoff : null,
     };
     await saveComparison(c);
     setSaved(await listComparisons());
   };
 
   const base = safeFilename(result?.title ?? 'comparison');
+
+  const cut: DendroCut | null = useMemo(() => {
+    if (!result || !cutOn || !Number.isFinite(cutoff)) return null;
+    const height = result.coefficient ? similarityToHeight(cutoff) : cutoff;
+    const c = cutTree(result.tree, height);
+    return { height, groups: c.groups, sizes: c.sizes, label: result.coefficient ? `${cutoff}%` : `${cutoff}` };
+  }, [result, cutOn, cutoff]);
+
+  const runBootstrap = () => {
+    if (!result) return;
+    const token = ++bootToken.current;
+    const bs = new Bootstrap(
+      result.tree,
+      result.similarity,
+      result.linkage,
+      bootstrapData(result.similarity, result.matching.matrix, result.entries.map((e) => e.norm.profile)),
+    );
+    const total = Math.max(10, Math.min(1000, replicates));
+    setSupport(null);
+    setBootProgress(0);
+    const step = () => {
+      if (token !== bootToken.current) return;
+      bs.run(Math.min(BOOTSTRAP_BATCH, total - bs.replicates));
+      if (bs.replicates >= total) {
+        setSupport(bs.support());
+        setBootProgress(null);
+      } else {
+        setBootProgress(bs.replicates / total);
+        setTimeout(step, 0);
+      }
+    };
+    setTimeout(step, 0);
+  };
+
+  const exportClustersCsv = () => {
+    if (!result || !cut) return;
+    const q = (s: string) => `"${s.replace(/"/g, '""')}"`;
+    const rows = [
+      [q('Lane'), q('Cluster'), q('Cluster size'), ...result.headers.map(q)].join(','),
+      ...leafOrder(result.tree).map((i) =>
+        [q(result.names[i]), cut.groups[i], cut.sizes[cut.groups[i] - 1], ...result.leaves[i].labels.map(q)].join(','),
+      ),
+    ];
+    downloadText(`${base}-clusters.csv`, rows.join('\n'), 'text/csv');
+  };
+
+  const exportBandsCsv = () => {
+    if (!result) return;
+    const order = leafOrder(result.tree);
+    const extra = result.headers.map((header, c) => ({ header, values: order.map((i) => result.leaves[i].labels[c]) }));
+    if (cut) extra.unshift({ header: 'Cluster', values: order.map((i) => String(cut.groups[i])) });
+    const matching = { classes: result.matching.classes, matrix: order.map((i) => result.matching.matrix[i]) };
+    downloadText(`${base}-bands.csv`, bandMatrixCsv(matching, order.map((i) => result.names[i]), extra), 'text/csv');
+  };
 
   const exportMatrixCsv = () => {
     if (!result) return;
@@ -426,6 +513,64 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                   Node values
                 </label>
               </div>
+              <div className="row small" style={{ marginBottom: 8 }}>
+                <label className="check">
+                  <input type="checkbox" checked={cutOn} onChange={(e) => setCutOn(e.target.checked)} />
+                  {result.coefficient ? 'Cut-off at' : 'Cut-off at distance'}
+                </label>
+                <input
+                  type="number"
+                  aria-label="Cut-off"
+                  min={0}
+                  max={result.coefficient ? 100 : undefined}
+                  step={result.coefficient ? 1 : 0.01}
+                  value={cutoff}
+                  disabled={!cutOn}
+                  style={{ width: 70 }}
+                  onChange={(e) => setCutoff(Math.max(0, Number(e.target.value)))}
+                />
+                {result.coefficient && <span>%</span>}
+                {cut && (
+                  <span className="muted">
+                    {cut.sizes.filter((k) => k >= 2).length} clusters · {cut.sizes.filter((k) => k < 2).length} unclustered
+                  </span>
+                )}
+                <span className="spacer" />
+                <span>Bootstrap</span>
+                <input
+                  type="number"
+                  aria-label="Bootstrap replicates"
+                  min={10}
+                  max={1000}
+                  step={10}
+                  value={replicates}
+                  style={{ width: 70 }}
+                  onChange={(e) => setReplicates(Number(e.target.value))}
+                />
+                <span>replicates</span>
+                {bootProgress !== null ? (
+                  <>
+                    <span className="muted">{Math.round(bootProgress * 100)}%</span>
+                    <button
+                      onClick={() => {
+                        bootToken.current++;
+                        setBootProgress(null);
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </>
+                ) : (
+                  <button onClick={runBootstrap} title="Resample band classes (band-based measures) or profile points (curve-based measures)">
+                    {support ? 'Re-run' : 'Run'}
+                  </button>
+                )}
+                {support && (
+                  <button className="link" onClick={() => setSupport(null)}>
+                    Hide
+                  </button>
+                )}
+              </div>
               <div className="result-tabs">
                 <button className={tab === 'dendrogram' ? 'active' : ''} onClick={() => setTab('dendrogram')}>
                   Dendrogram
@@ -433,15 +578,28 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                 <button className={tab === 'matrix' ? 'active' : ''} onClick={() => setTab('matrix')}>
                   {result.coefficient ? 'Similarity matrix' : 'Distance matrix'}
                 </button>
+                <button className={tab === 'bands' ? 'active' : ''} onClick={() => setTab('bands')}>
+                  Band matching
+                </button>
                 <span className="spacer" />
                 {tab === 'dendrogram' ? (
                   <>
                     <button onClick={() => svgRef.current && downloadText(`${base}.svg`, svgToString(svgRef.current), 'image/svg+xml')}>SVG</button>
                     <button onClick={async () => svgRef.current && downloadBlob(`${base}.png`, await svgToPngBlob(svgRef.current))}>PNG</button>
-                    <button onClick={() => downloadText(`${base}.nwk`, toNewick(result.tree, result.names), 'text/plain')}>Newick</button>
+                    <button onClick={() => downloadText(`${base}.nwk`, toNewick(result.tree, result.names, support ?? undefined), 'text/plain')}>
+                      Newick
+                    </button>
+                    {cut && <button onClick={exportClustersCsv}>Clusters CSV</button>}
                   </>
-                ) : (
+                ) : tab === 'matrix' ? (
                   <button onClick={exportMatrixCsv}>CSV</button>
+                ) : (
+                  <>
+                    <button onClick={exportBandsCsv}>CSV</button>
+                    <button onClick={() => downloadText(`${base}-bands.nex`, bandMatrixNexus(result.matching, result.names), 'text/plain')} title="Binary matrix for PAUP*, SplitsTree, MrBayes…">
+                      NEXUS
+                    </button>
+                  </>
                 )}
               </div>
               {tab === 'dendrogram' ? (
@@ -455,10 +613,14 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                     output={output}
                     title={result.title}
                     showValues={showValues}
+                    cut={cut}
+                    support={support}
                   />
                 </div>
-              ) : (
+              ) : tab === 'matrix' ? (
                 <Matrix result={result} />
+              ) : (
+                <BandTable result={result} cut={cut} />
               )}
             </>
           )}
@@ -504,6 +666,64 @@ function Matrix({ result }: { result: Result }) {
           ))}
         </tbody>
       </table>
+    </div>
+  );
+}
+
+/** Band-matching table: one row per lane (dendrogram order), one column per band class. */
+function BandTable({ result, cut }: { result: Result; cut: DendroCut | null }) {
+  const order = leafOrder(result.tree);
+  const { classes, matrix } = result.matching;
+  const counts = classes.map((_, k) => matrix.reduce((s, row) => s + row[k], 0));
+  const polymorphic = counts.filter((c) => c > 0 && c < matrix.length).length;
+  return (
+    <div className="stack">
+      <span className="small muted">
+        {classes.length} band classes ({polymorphic} polymorphic) · tolerance ±{result.tolerance.toPrecision(3)} · columns headed by the mean
+        molecular weight of each class
+      </span>
+      <div className="table-wrap" style={{ maxHeight: '70vh' }}>
+        <table className="matrix" style={{ borderCollapse: 'collapse' }}>
+          <thead>
+            <tr>
+              <th />
+              {cut && <th className="small">Cl.</th>}
+              {classes.map((v, k) => (
+                <th key={k} className="small" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)', padding: 4, fontWeight: 500 }}>
+                  {Number(v.toPrecision(4))}
+                </th>
+              ))}
+              <th className="small">Bands</th>
+            </tr>
+          </thead>
+          <tbody>
+            {order.map((i) => {
+              const g = cut?.groups[i] ?? 0;
+              const colour = cut && cut.sizes[g - 1] >= 2 ? CLUSTER_COLOURS[(g - 1) % CLUSTER_COLOURS.length] : undefined;
+              return (
+                <tr key={i}>
+                  <th className="small" style={{ textAlign: 'right', paddingRight: 6, fontWeight: 500, whiteSpace: 'nowrap' }}>
+                    {result.names[i]}
+                  </th>
+                  {cut && (
+                    <td className="small" style={{ color: colour, fontWeight: 600, textAlign: 'center' }}>
+                      {g}
+                    </td>
+                  )}
+                  {matrix[i].map((v, k) => (
+                    <td key={k} className="cell" style={{ background: v ? (colour ?? '#1c2430') : '#f2f4f7', color: '#fff', minWidth: 14 }} title={`${result.names[i]} · ${Number(classes[k].toPrecision(4))}: ${v ? 'present' : 'absent'}`}>
+                      {v ? '1' : ''}
+                    </td>
+                  ))}
+                  <td className="small muted" style={{ textAlign: 'right' }}>
+                    {matrix[i].reduce((a, b) => a + b, 0)}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }
