@@ -12,6 +12,7 @@ import {
   invert,
   rotate90,
 } from '../core/image';
+import { gamma, median, subtractBackground } from '../core/filters';
 import { NormalisationError, normaliseLanes, validateReferences } from '../core/normalise';
 import type { GrayImage, Lab, Lane, Marker, Rect } from '../core/types';
 import { EMPTY_META } from '../core/types';
@@ -117,6 +118,9 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   const [cropRect, setCropRect] = useState<Rect | null>(null);
   const [zoom, setZoom] = useState(1);
   const [bc, setBc] = useState({ brightness: 0, contrast: 0 });
+  const [rollRadius, setRollRadius] = useState(50);
+  const [rollLight, setRollLight] = useState(!initial.darkBackground);
+  const [gammaValue, setGammaValue] = useState(1);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [peakTolerance, setPeakTolerance] = useState(2);
@@ -185,8 +189,9 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     if (step === 'contrast' && (bc.brightness !== 0 || bc.contrast !== 0)) {
       return brightnessContrast(image, bc.brightness, bc.contrast);
     }
+    if (step === 'other' && gammaValue !== 1) return gamma(image, gammaValue);
     return image;
-  }, [step, image, bc]);
+  }, [step, image, bc, gammaValue]);
 
   const detectFor = (ls: Lane[], which: (l: Lane) => boolean): Lane[] =>
     ls.map((l) => (which(l) ? { ...l, bands: detectBands(profileOf(l), l.threshold, peakTolerance) } : l));
@@ -210,6 +215,18 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     setImageUndo((u) => [...u.slice(-19), image]);
     setWork((w) => ({ ...w, image: op(w.image), lanes: geometric ? [] : w.lanes }));
     if (geometric) resetLaneHistory();
+  };
+
+  /** Image operations that take a noticeable time: show the busy state before running them. */
+  const applySlowImageOp = (op: (img: GrayImage) => GrayImage) => {
+    setBusy(true);
+    setTimeout(() => {
+      try {
+        applyImageOp(op, false);
+      } finally {
+        setBusy(false);
+      }
+    }, 30);
   };
 
   const undoImage = () => {
@@ -828,6 +845,42 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
             <button onClick={() => applyImageOp((i) => rotate90(i, false), true)}>Rotate 90° right</button>
             <button onClick={undoImage} disabled={!imageUndo.length}>
               Undo
+            </button>
+          </div>
+          <h4>Subtract background</h4>
+          <p className="instructions small">
+            Removes uneven illumination and smears with a rolling ball (as ImageJ&apos;s <i>Subtract Background</i>). Use a radius at least as
+            large as the widest band (lanes are usually a good choice).
+          </p>
+          <div className="row">
+            <label className="row small">
+              Radius
+              <input type="number" min={1} max={500} value={rollRadius} style={{ width: 70 }} onChange={(e) => setRollRadius(Math.max(1, Math.min(500, Number(e.target.value) || 1)))} />
+              px
+            </label>
+            <label className="check small">
+              <input type="checkbox" checked={rollLight} onChange={(e) => setRollLight(e.target.checked)} />
+              Light background
+            </label>
+            <button disabled={busy} onClick={() => applySlowImageOp((img) => subtractBackground(img, rollRadius, rollLight))}>
+              {busy ? 'Working…' : 'Subtract background'}
+            </button>
+          </div>
+          <h4>Gamma and noise</h4>
+          <div className="slider-row">
+            <span className="small">Gamma</span>
+            <input type="range" min={0.2} max={3} step={0.05} value={gammaValue} onChange={(e) => setGammaValue(Number(e.target.value))} />
+            <span className="value small">{gammaValue.toFixed(2)}</span>
+          </div>
+          <div className="row">
+            <button disabled={gammaValue === 1} onClick={() => {
+              applyImageOp((img) => gamma(img, gammaValue), false);
+              setGammaValue(1);
+            }}>
+              Apply gamma
+            </button>
+            <button disabled={busy} onClick={() => applySlowImageOp((img) => median(img, 1))} title="3×3 median filter: removes dust and speckle noise">
+              Median filter (3×3)
             </button>
           </div>
           <button className="link small" style={{ alignSelf: 'flex-start' }} onClick={() => {

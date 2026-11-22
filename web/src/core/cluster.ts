@@ -97,16 +97,21 @@ export function leafOrder(node: ClusterNode): number[] {
   return [...leafOrder(node.left), ...leafOrder(node.right)];
 }
 
-/** Newick representation; branch lengths are half the merge distances (ultrametric tree). */
-export function toNewick(node: ClusterNode, names: string[]): string {
+/**
+ * Newick representation; branch lengths are half the merge distances (ultrametric tree). Internal nodes
+ * are labelled with their bootstrap support when `support` is given.
+ */
+export function toNewick(node: ClusterNode, names: string[], support?: Map<ClusterNode, number>): string {
   const esc = (s: string) => (/[\s(),:;'[\]]/.test(s) ? `'${s.replace(/'/g, "''")}'` : s);
+  const supportLabel = (n: ClusterNode) => (support?.has(n) ? Math.round(support.get(n)!).toString() : '');
   const rec = (n: ClusterNode, parentHeight: number): string => {
     const len = Math.max(0, (parentHeight - n.height) / 2);
-    const label = !n.left || !n.right ? esc(names[n.index]) : `(${rec(n.left, n.height)},${rec(n.right, n.height)})`;
+    const label =
+      !n.left || !n.right ? esc(names[n.index]) : `(${rec(n.left, n.height)},${rec(n.right, n.height)})${supportLabel(n)}`;
     return `${label}:${len.toFixed(6)}`;
   };
   if (!node.left || !node.right) return `${esc(names[node.index])};`;
-  return `(${rec(node.left, node.height)},${rec(node.right, node.height)});`;
+  return `(${rec(node.left, node.height)},${rec(node.right, node.height)})${supportLabel(node)};`;
 }
 
 /** Cophenetic matrix: merge height at which two leaves are joined. */

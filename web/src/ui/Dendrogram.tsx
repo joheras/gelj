@@ -2,6 +2,7 @@ import { forwardRef } from 'react';
 import type { ClusterNode } from '../core/cluster';
 import { leafOrder } from '../core/cluster';
 import type { OutputMode } from '../core/types';
+import { CLUSTER_COLOURS } from './clusterColours';
 
 export interface DendroLeaf {
   /** Label columns. */
@@ -12,6 +13,20 @@ export interface DendroLeaf {
   positions: number[];
 }
 
+/** Clusters defined by a cut-off line. */
+export interface DendroCut {
+  /** Merge height (distance) of the cut. */
+  height: number;
+  /** Cluster number of every leaf (by leaf index). */
+  groups: number[];
+  /** Size of every cluster (index = number - 1). */
+  sizes: number[];
+  /** Text of the cut-off level (e.g. "80%"). */
+  label: string;
+}
+
+const INK = '#1c2430';
+
 interface Props {
   tree: ClusterNode;
   leaves: DendroLeaf[];
@@ -20,6 +35,9 @@ interface Props {
   output: OutputMode;
   title: string;
   showValues: boolean;
+  cut?: DendroCut | null;
+  /** Bootstrap support (0..100) of the internal nodes. */
+  support?: Map<ClusterNode, number> | null;
 }
 
 const FONT = 'system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif';
@@ -29,13 +47,13 @@ function textWidth(s: string, size = 12) {
 }
 
 export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
-  { tree, leaves, headers, coefficient, output, title, showValues },
+  { tree, leaves, headers, coefficient, output, title, showValues, cut, support },
   ref,
 ) {
   const withImages = output === 'dendrogram+images+bands' || output === 'dendrogram+images';
   const withBands = output === 'dendrogram+images+bands' || output === 'dendrogram+bands';
   const rowH = withImages ? 30 : 22;
-  const top = 84;
+  const top = cut || support ? 98 : 84;
   const left = 16;
   const treeW = 300;
   const stripW = 220;
@@ -55,20 +73,39 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
   const rowY = new Map<number, number>();
   order.forEach((leaf, i) => rowY.set(leaf, top + i * rowH + rowH / 2));
 
-  const lines: string[] = [];
-  const values: { x: number; y: number; v: string }[] = [];
+  // Colour of a node: its cluster's colour when every leaf below it belongs to one multi-lane cluster.
+  const multi = (g: number) => !!cut && cut.sizes[g - 1] >= 2;
+  const groupOf = (node: ClusterNode): number => {
+    if (!cut) return 0;
+    if (!node.left || !node.right) return multi(cut.groups[node.index]) ? cut.groups[node.index] : 0;
+    const a = groupOf(node.left);
+    return a !== 0 && a === groupOf(node.right) ? a : 0;
+  };
+  const colourOf = (g: number) => (g ? CLUSTER_COLOURS[(g - 1) % CLUSTER_COLOURS.length] : INK);
+
+  const lines = new Map<string, string[]>();
+  const addLine = (colour: string, d: string) => lines.set(colour, [...(lines.get(colour) ?? []), d]);
+  const values: { x: number; y: number; v: string; s?: number }[] = [];
   const walk = (node: ClusterNode): { x: number; y: number } => {
     if (!node.left || !node.right) return { x: left + treeW, y: rowY.get(node.index)! };
     const a = walk(node.left);
     const b = walk(node.right);
     const x = Math.min(xOf(node.height), a.x, b.x);
-    lines.push(`M${x},${a.y}V${b.y}M${x},${a.y}H${a.x}M${x},${b.y}H${b.x}`);
+    addLine(colourOf(groupOf(node)), `M${x},${a.y}V${b.y}M${x},${a.y}H${a.x}M${x},${b.y}H${b.x}`);
     const y = (a.y + b.y) / 2;
-    values.push({ x, y, v: coefficient ? (100 * (1 - node.height)).toFixed(1) : node.height.toPrecision(3) });
+    values.push({
+      x,
+      y,
+      v: coefficient ? (100 * (1 - node.height)).toFixed(1) : node.height.toPrecision(3),
+      s: node === tree ? undefined : support?.get(node),
+    });
     return { x, y };
   };
   const root = walk(tree);
-  lines.push(`M${left - 8},${root.y}H${root.x}`);
+  addLine(INK, `M${left - 8},${root.y}H${root.x}`);
+  const cutX = cut ? Math.max(left, Math.min(left + treeW, xOf(cut.height))) : 0;
+  const clusterCount = cut ? cut.sizes.filter((n) => n >= 2).length : 0;
+  const singletons = cut ? cut.sizes.length - clusterCount : 0;
 
   // Axis ticks.
   const ticks: number[] = [];
@@ -84,6 +121,8 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
   if (withImages) x += stripW + gap;
   const bandX = withBands ? x : -1;
   if (withBands) x += stripW + gap;
+  const clusterX = cut ? x : -1;
+  if (cut) x += Math.max(textWidth('Cluster', 11), textWidth(String(cut.sizes.length)) + 16) + gap;
   const colX: number[] = [];
   headers.forEach((h, c) => {
     colX.push(x);
@@ -108,6 +147,16 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
       <text x={left} y={18} fontSize={14} fontWeight={600} fill="#111">
         {title}
       </text>
+      {(cut || support) && (
+        <text x={left} y={36} fontSize={11} fill="#555">
+          {[
+            cut && `Cut-off ${cut.label}: ${clusterCount} cluster${clusterCount === 1 ? '' : 's'}, ${singletons} unclustered lane${singletons === 1 ? '' : 's'}`,
+            support && 'Bootstrap support (%) in blue',
+          ]
+            .filter(Boolean)
+            .join(' · ')}
+        </text>
+      )}
       {/* axis */}
       <g fontSize={10} fill="#444" stroke="none">
         <line x1={left} x2={left + treeW} y1={top - 14} y2={top - 14} stroke="#888" />
@@ -126,13 +175,31 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
           {coefficient ? 'Similarity (%)' : 'Distance'}
         </text>
       </g>
-      <path d={lines.join('')} stroke="#1c2430" strokeWidth={1.3} fill="none" />
+      {[...lines].map(([colour, d]) => (
+        <path key={colour} d={d.join('')} stroke={colour} strokeWidth={colour === INK ? 1.3 : 1.8} fill="none" />
+      ))}
+      {cut && (
+        <g>
+          <line x1={cutX} x2={cutX} y1={top - 14} y2={top + n * rowH} stroke="#d62728" strokeWidth={1} strokeDasharray="4 3" />
+          <text x={cutX} y={top - 32} fontSize={10} fill="#d62728" textAnchor="middle">
+            {cut.label}
+          </text>
+        </g>
+      )}
       {showValues &&
         values.map((v, i) => (
           <text key={i} x={v.x + 3} y={v.y - 3} fontSize={9} fill="#c0392b">
             {v.v}
           </text>
         ))}
+      {support &&
+        values
+          .filter((v) => v.s !== undefined)
+          .map((v, i) => (
+            <text key={i} x={v.x - 3} y={v.y + 10} fontSize={9} fill="#1f5fbf" textAnchor="end">
+              {Math.round(v.s!)}
+            </text>
+          ))}
       {/* headers */}
       <g fontSize={11} fontWeight={600} fill="#444">
         {withImages && (
@@ -143,6 +210,11 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
         {withBands && (
           <text x={bandX} y={top - 8}>
             Bands
+          </text>
+        )}
+        {cut && (
+          <text x={clusterX} y={top - 8}>
+            Cluster
           </text>
         )}
         {headers.map((h, c) => (
@@ -175,12 +247,20 @@ export const Dendrogram = forwardRef<SVGSVGElement, Props>(function Dendrogram(
                 ))}
               </g>
             )}
+            {cut && (
+              <g>
+                <rect x={clusterX} y={y + rowH / 2 - 5} width={10} height={10} fill={colourOf(multi(cut.groups[leaf]) ? cut.groups[leaf] : 0)} opacity={multi(cut.groups[leaf]) ? 1 : 0.25} />
+                <text x={clusterX + 14} y={y + rowH / 2 + 4} fontSize={12} fill="#111">
+                  {cut.groups[leaf]}
+                </text>
+              </g>
+            )}
             {l.labels.map((t, c) => (
               <text key={c} x={colX[c]} y={y + rowH / 2 + 4} fontSize={12} fill="#111">
                 {t.length > 34 ? t.slice(0, 33) + '…' : t}
               </text>
             ))}
-            <line x1={left + treeW} x2={left + treeW + 6} y1={y + rowH / 2} y2={y + rowH / 2} stroke="#1c2430" strokeWidth={1.3} />
+            <line x1={left + treeW} x2={left + treeW + 6} y1={y + rowH / 2} y2={y + rowH / 2} stroke={colourOf(groupOf({ index: leaf, height: 0, size: 1 }))} strokeWidth={1.3} />
           </g>
         );
       })}
