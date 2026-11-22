@@ -11,7 +11,7 @@ import { cutTree, similarityToHeight } from '../core/treecut';
 import { CLUSTER_COLOURS } from './clusterColours';
 import { Dendrogram, type DendroCut, type DendroLeaf } from './Dendrogram';
 import { svgToPngBlob, svgToString } from './svgexport';
-import { dataURLToGray, downloadBlob, downloadText, grayToDataURL, safeFilename } from './imageio';
+import { dataURLToGray, downloadBlob, downloadText, grayToPng, safeFilename } from './imageio';
 
 type Field = Comparison['fields'][number];
 
@@ -68,12 +68,15 @@ function fieldValue(e: Entry, f: Field): string {
 }
 
 const rotatedCache = new Map<string, string>();
+const ROTATED_CACHE_SIZE = 2000;
 
 async function rotatedLaneImage(n: NormalisedLane): Promise<string> {
   const hit = rotatedCache.get(n.image);
   if (hit) return hit;
-  const url = grayToDataURL(rotate90(await dataURLToGray(n.image), true));
+  const url = await grayToPng(rotate90(await dataURLToGray(n.image), true));
   rotatedCache.set(n.image, url);
+  // Bounded, oldest first: entries of deleted or re-analysed experiments are never requested again.
+  if (rotatedCache.size > ROTATED_CACHE_SIZE) rotatedCache.delete(rotatedCache.keys().next().value!);
   return url;
 }
 
@@ -632,7 +635,9 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
 
 function Matrix({ result }: { result: Result }) {
   const order = leafOrder(result.tree);
-  const max = Math.max(1e-9, ...result.dist.flat());
+  // A loop, not Math.max(...flat): spreading n² values overflows the call stack for a few hundred lanes.
+  let max = 1e-9;
+  for (const row of result.dist) for (const v of row) if (v > max) max = v;
   const cellStyle = (d: number) => {
     const t = result.coefficient ? 1 - d : 1 - d / max; // 1 = similar
     const lightness = Math.round(97 - t * 50);

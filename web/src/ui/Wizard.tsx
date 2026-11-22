@@ -1,6 +1,6 @@
 // Analysis assistant, following GelJ's four-step workflow:
 // 1 pre-processing, 2 lane detection, 3 normalisation (markers), 4 band detection.
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { fitCurve, FIT_MODELS } from '../core/curvefit';
 import { detectBands, detectLanes, laneProfile, makeLanes, suggestThreshold } from '../core/detect';
 import {
@@ -86,10 +86,18 @@ function clampRect(r: Rect, img: GrayImage): Rect {
   return { x, y, w, h };
 }
 
+const NON_TEXT_INPUTS = new Set(['range', 'checkbox', 'radio', 'button', 'submit', 'reset', 'color', 'file']);
+
+/** Whether a key press goes to a text field (sliders, checkboxes and buttons keep the shortcuts working). */
 function isTyping(e: KeyboardEvent): boolean {
   const t = e.target as HTMLElement | null;
-  return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable);
+  if (!t) return false;
+  if (t.tagName === 'INPUT') return !NON_TEXT_INPUTS.has((t as HTMLInputElement).type);
+  return t.tagName === 'TEXTAREA' || t.tagName === 'SELECT' || t.isContentEditable;
 }
+
+/** Lets the browser paint (e.g. a "busy" label) before a long synchronous computation. */
+const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 interface Props {
   labs: Lab[];
@@ -159,11 +167,18 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   };
 
   // ---- Derived data -----------------------------------------------------------------
-  const profiles = useMemo(() => {
-    const m = new Map<string, number[]>();
-    for (const l of lanes) m.set(l.id, laneProfile(image, l.rect, darkBackground));
-    return m;
-  }, [image, lanes, darkBackground]);
+  // Lane profiles, computed on demand and cached by lane rectangle (rects are replaced, never mutated),
+  // so that dragging a lane or a threshold slider does not recompute the profile of every lane. A new cache
+  // is created whenever the image or the background changes.
+  const profileCache = useMemo(() => new WeakMap<Rect, number[]>(), [image, darkBackground]); // eslint-disable-line react-hooks/exhaustive-deps
+  const profileOf = (l: Lane): number[] => {
+    let p = profileCache.get(l.rect);
+    if (!p) {
+      p = laneProfile(image, l.rect, darkBackground);
+      profileCache.set(l.rect, p);
+    }
+    return p;
+  };
 
   const refs = useMemo(() => sortLanes(lanes.filter((l) => l.isReference)), [lanes]);
   const samples = useMemo(() => sortLanes(lanes.filter((l) => !l.isReference)), [lanes]);
@@ -178,13 +193,19 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     return image;
   }, [step, image, bc, gammaValue]);
 
-  const detectFor = useCallback(
-    (ls: Lane[], which: (l: Lane) => boolean): Lane[] =>
-      ls.map((l) =>
-        which(l) ? { ...l, bands: detectBands(laneProfile(image, l.rect, darkBackground), l.threshold, peakTolerance) } : l,
-      ),
-    [image, darkBackground, peakTolerance],
-  );
+  const detectFor = (ls: Lane[], which: (l: Lane) => boolean): Lane[] =>
+    ls.map((l) => (which(l) ? { ...l, bands: detectBands(profileOf(l), l.threshold, peakTolerance) } : l));
+
+  /**
+   * A lane that joins the markers or the samples after their bands were detected gets the group's
+   * (mean) threshold and its bands detected, instead of silently having none.
+   */
+  const withGroupBands = (lane: Lane, all: Lane[]): Lane => {
+    const group = all.filter((l) => l.id !== lane.id && l.isReference === lane.isReference && l.bands.length > 0);
+    if (group.length === 0) return lane;
+    const threshold = Math.round(group.reduce((sum, l) => sum + l.threshold, 0) / group.length);
+    return { ...lane, threshold, bands: detectBands(profileOf(lane), threshold, peakTolerance) };
+  };
 
   // ---- Image operations (step 1) ------------------------------------------------------
   const applyImageOp = (op: (img: GrayImage) => GrayImage, geometric: boolean) => {
@@ -193,11 +214,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     }
     setImageUndo((u) => [...u.slice(-19), image]);
     setWork((w) => ({ ...w, image: op(w.image), lanes: geometric ? [] : w.lanes }));
-    if (geometric) {
-      setPast([]);
-      setFuture([]);
-      setSel({ laneId: null, band: null });
-    }
+    if (geometric) resetLaneHistory();
   };
 
   /** Image operations that take a noticeable time: show the busy state before running them. */
@@ -216,43 +233,39 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     const prev = imageUndo[imageUndo.length - 1];
     if (!prev) return;
     setImageUndo((u) => u.slice(0, -1));
-    setWork((w) => ({
-      ...w,
-      image: prev,
-      lanes: prev.width === w.image.width && prev.height === w.image.height ? w.lanes : [],
-    }));
+    const sameSize = prev.width === image.width && prev.height === image.height;
+    setWork((w) => ({ ...w, image: prev, lanes: sameSize ? w.lanes : [] }));
+    if (!sameSize) resetLaneHistory();
+  };
+
+  /** Lane undo history no longer applies once the lanes are discarded. */
+  const resetLaneHistory = () => {
+    setPast([]);
+    setFuture([]);
+    setSel({ laneId: null, band: null });
   };
 
   // ---- Navigation ---------------------------------------------------------------------
+  /** State on entering a step (pure: it runs inside a state updater, which StrictMode calls twice). */
   const enterStep = (index: number, w: WorkState): WorkState => {
     const id = STEPS[index].id;
     let next = w;
     if (id === 'lanes' && w.lanes.length === 0) {
       next = { ...next, lanes: makeLanes(detectLanes(w.image, w.darkBackground)) };
-      setPast([]);
-      setFuture([]);
     }
     if (id === 'markerThreshold') {
       const rs = next.lanes.filter((l) => l.isReference);
       if (rs.every((l) => l.bands.length === 0)) {
-        const t = suggestThreshold(rs.map((l) => laneProfile(w.image, l.rect, w.darkBackground)));
+        const t = suggestThreshold(rs.map(profileOf));
         next = { ...next, lanes: detectFor(next.lanes.map((l) => (l.isReference ? { ...l, threshold: t } : l)), (l) => l.isReference) };
       }
     }
     if (id === 'bandThreshold') {
       const ss = next.lanes.filter((l) => !l.isReference);
       if (ss.every((l) => l.bands.length === 0)) {
-        const t = suggestThreshold(ss.map((l) => laneProfile(w.image, l.rect, w.darkBackground)));
+        const t = suggestThreshold(ss.map(profileOf));
         next = { ...next, lanes: detectFor(next.lanes.map((l) => (!l.isReference ? { ...l, threshold: t } : l)), (l) => !l.isReference) };
       }
-    }
-    if (id === 'markerModel') {
-      const k = next.lanes.find((l) => l.isReference)?.bands.length ?? 0;
-      setNewMarker((m) => ({
-        ...m,
-        mw: Array.from({ length: k }, (_, i) => m.mw[i] ?? (next.referenceMw[i] !== undefined ? String(next.referenceMw[i]) : '')),
-        fitMethod: k >= 5 ? 2 : k >= 3 ? 1 : 0,
-      }));
     }
     return next;
   };
@@ -328,6 +341,16 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
       }
     }
     setWork((w) => enterStep(index, w));
+    const id = STEPS[index].id;
+    if (id === 'lanes' && work.lanes.length === 0) resetLaneHistory();
+    if (id === 'markerModel') {
+      const k = work.lanes.find((l) => l.isReference)?.bands.length ?? 0;
+      setNewMarker((m) => ({
+        ...m,
+        mw: Array.from({ length: k }, (_, i) => m.mw[i] ?? (work.referenceMw[i] !== undefined ? String(work.referenceMw[i]) : '')),
+        fitMethod: k >= 5 ? 2 : k >= 3 ? 1 : 0,
+      }));
+    }
     setSel({ laneId: null, band: null });
     setAddMode(false);
     setCropRect(null);
@@ -339,7 +362,8 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   const saveDraft = async () => {
     setBusy(true);
     try {
-      await saveExperiment(experimentFromWork(work, 'draft', stepIndex));
+      await nextFrame();
+      await saveExperiment(await experimentFromWork(work, 'draft', stepIndex));
       onClose(work.id);
     } finally {
       setBusy(false);
@@ -355,9 +379,10 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
     }
     setBusy(true);
     try {
+      await nextFrame();
       const ordered = sortLanes(work.lanes);
       const data = normaliseLanes(work.image, work.darkBackground, ordered, marker, work.referenceMw);
-      const exp = experimentFromWork({ ...work, lanes: ordered }, 'complete', stepIndex, encodeNormalised(data));
+      const exp = await experimentFromWork({ ...work, lanes: ordered }, 'complete', stepIndex, await encodeNormalised(data));
       await saveExperiment(exp);
       onClose(exp.id);
     } catch (e) {
@@ -382,16 +407,20 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
 
   const toggleReference = (id: string | null) => {
     if (!id) return;
-    commitLanes(lanes.map((l) => (l.id === id ? { ...l, isReference: !l.isReference, bands: [] } : l)));
+    commitLanes(lanes.map((l) => (l.id === id ? withGroupBands({ ...l, isReference: !l.isReference, bands: [] }, lanes) : l)));
+  };
+
+  const setBackground = (dark: boolean) => {
+    if (dark === darkBackground) return;
+    setWork((w) => ({ ...w, darkBackground: dark, lanes: [] }));
+    resetLaneHistory();
   };
 
   const setThreshold = (ids: Set<string>, t: number) => {
     setWork((w) => ({
       ...w,
       lanes: w.lanes.map((l) =>
-        ids.has(l.id)
-          ? { ...l, threshold: t, bands: detectBands(laneProfile(w.image, l.rect, w.darkBackground), t, peakTolerance) }
-          : l,
+        ids.has(l.id) ? { ...l, threshold: t, bands: detectBands(profileOf(l), t, peakTolerance) } : l,
       ),
     }));
   };
@@ -491,15 +520,18 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           const r = normRect(d.start, p);
           setCropRect(null);
           if (r.w > 4 && r.h > 4) {
-            const lane: Lane = {
-              id: uid(),
-              name: `Lane ${lanes.length + 1}`,
-              rect: clampRect(r, image),
-              isReference: false,
-              threshold: 128,
-              bands: [],
-              meta: { ...EMPTY_META },
-            };
+            const lane = withGroupBands(
+              {
+                id: uid(),
+                name: `Lane ${lanes.length + 1}`,
+                rect: clampRect(r, image),
+                isReference: false,
+                threshold: 128,
+                bands: [],
+                meta: { ...EMPTY_META },
+              },
+              lanes,
+            );
             commitLanes([...lanes, lane]);
             setSel({ laneId: lane.id, band: null });
             setAddMode(false);
@@ -677,7 +709,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           Profile of <b>{lane.name}</b> {lane.isReference && <span className="badge ref">reference</span>} — {lane.bands.length} bands
         </div>
         <ProfileChart
-          profile={profiles.get(lane.id) ?? []}
+          profile={profileOf(lane)}
           threshold={showThreshold ? lane.threshold : undefined}
           bands={lane.bands}
           colour={lane.isReference ? REF_COLOUR : work.bandColour}
@@ -865,19 +897,11 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           <p className="instructions">Indicate whether the background of the image is dark (bright bands) or light (dark bands).</p>
           <div className="stack">
             <label className="check">
-              <input
-                type="radio"
-                checked={darkBackground}
-                onChange={() => setWork((w) => ({ ...w, darkBackground: true, lanes: w.darkBackground ? w.lanes : [] }))}
-              />
+              <input type="radio" name="background" checked={darkBackground} onChange={() => setBackground(true)} />
               Dark background
             </label>
             <label className="check">
-              <input
-                type="radio"
-                checked={!darkBackground}
-                onChange={() => setWork((w) => ({ ...w, darkBackground: false, lanes: w.darkBackground ? [] : w.lanes }))}
-              />
+              <input type="radio" name="background" checked={!darkBackground} onChange={() => setBackground(false)} />
               Light background
             </label>
           </div>
@@ -1001,11 +1025,11 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           </p>
           <div className="row">
             <label className="check">
-              <input type="radio" checked={markerMode === 'existing'} onChange={() => setMarkerMode('existing')} />
+              <input type="radio" name="markerMode" checked={markerMode === 'existing'} onChange={() => setMarkerMode('existing')} />
               Use available marker
             </label>
             <label className="check">
-              <input type="radio" checked={markerMode === 'new'} onChange={() => setMarkerMode('new')} />
+              <input type="radio" name="markerMode" checked={markerMode === 'new'} onChange={() => setMarkerMode('new')} />
               New marker
             </label>
           </div>

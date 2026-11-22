@@ -63,12 +63,16 @@ export function GelCanvas({ image, draw, onPointer, cursor, zoom }: Props) {
       <canvas
         ref={canvasRef}
         style={{ width: cssW, height: cssH, cursor }}
+        role="img"
+        aria-label={`Gel image, ${image.width}×${image.height} pixels`}
         onPointerDown={(e) => {
           (e.target as HTMLCanvasElement).setPointerCapture(e.pointerId);
           onPointer?.('down', toImage(e), e, scale);
         }}
         onPointerMove={(e) => onPointer?.('move', toImage(e), e, scale)}
         onPointerUp={(e) => onPointer?.('up', toImage(e), e, scale)}
+        // A cancelled pointer (touch gesture, lost capture) ends the drag like a release.
+        onPointerCancel={(e) => onPointer?.('up', toImage(e), e, scale)}
         onDoubleClick={(e) => onPointer?.('double', toImage(e), e, scale)}
       />
     </div>
