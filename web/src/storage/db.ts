@@ -2,6 +2,7 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { BUILTIN_MARKERS } from '../core/markers';
 import type { Comparison, Experiment, Lab, Marker } from '../core/types';
+import { parseBackup } from './backup';
 
 interface GelJDB extends DBSchema {
   experiments: { key: string; value: Experiment };
@@ -165,20 +166,19 @@ export async function exportBackup(experimentIds?: string[]): Promise<Backup> {
 }
 
 export async function importBackup(data: unknown): Promise<{ experiments: number; markers: number; comparisons: number; labs: number }> {
-  const b = data as Partial<Backup>;
-  if (!b || b.format !== 'gelj-web') throw new Error('This file is not a GelJ Web export.');
+  const b = parseBackup(data);
   const d = await db();
   const tx = d.transaction(['experiments', 'markers', 'comparisons', 'labs'], 'readwrite');
-  for (const e of b.experiments ?? []) await tx.objectStore('experiments').put(e);
-  for (const m of b.markers ?? []) if (!m.builtin) await tx.objectStore('markers').put(m);
-  for (const c of b.comparisons ?? []) await tx.objectStore('comparisons').put(c);
-  for (const l of b.labs ?? []) await tx.objectStore('labs').put(l);
+  for (const e of b.experiments) await tx.objectStore('experiments').put(e);
+  for (const m of b.markers) await tx.objectStore('markers').put(m);
+  for (const c of b.comparisons) await tx.objectStore('comparisons').put(c);
+  for (const l of b.labs) await tx.objectStore('labs').put(l);
   await tx.done;
   changed();
   return {
-    experiments: b.experiments?.length ?? 0,
-    markers: b.markers?.length ?? 0,
-    comparisons: b.comparisons?.length ?? 0,
-    labs: b.labs?.length ?? 0,
+    experiments: b.experiments.length,
+    markers: b.markers.length,
+    comparisons: b.comparisons.length,
+    labs: b.labs.length,
   };
 }

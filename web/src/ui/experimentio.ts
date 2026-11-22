@@ -1,7 +1,7 @@
 import type { NormalisedLaneData } from '../core/normalise';
 import type { Experiment, GrayImage, Lane, NormalisedLane } from '../core/types';
 import { uid } from '../core/uid';
-import { dataURLToGray, grayToDataURL } from './imageio';
+import { dataURLToGray, grayToPng } from './imageio';
 
 /** In-memory state of an analysis being edited in the wizard. */
 export interface WorkState {
@@ -54,12 +54,13 @@ export async function workFromExperiment(e: Experiment): Promise<WorkState> {
   };
 }
 
-export function experimentFromWork(
+export async function experimentFromWork(
   w: WorkState,
   status: Experiment['status'],
   step: number,
   normalised: NormalisedLane[] = [],
-): Experiment {
+): Promise<Experiment> {
+  const [originalImage, image] = await Promise.all([grayToPng(w.original), grayToPng(w.image)]);
   return {
     id: w.id,
     name: w.name.trim() || 'Untitled experiment',
@@ -68,8 +69,8 @@ export function experimentFromWork(
     updatedAt: Date.now(),
     status,
     step,
-    originalImage: grayToDataURL(w.original),
-    image: grayToDataURL(w.image),
+    originalImage,
+    image,
     width: w.image.width,
     height: w.image.height,
     darkBackground: w.darkBackground,
@@ -82,12 +83,13 @@ export function experimentFromWork(
   };
 }
 
-export function encodeNormalised(data: NormalisedLaneData[]): NormalisedLane[] {
-  return data.map((d) => ({
+export async function encodeNormalised(data: NormalisedLaneData[]): Promise<NormalisedLane[]> {
+  const images = await Promise.all(data.map((d) => grayToPng(d.image)));
+  return data.map((d, i) => ({
     laneId: d.laneId,
     width: d.image.width,
     height: d.image.height,
-    image: grayToDataURL(d.image),
+    image: images[i],
     profile: d.profile.map((v) => Math.round(v * 100) / 100),
     positions: d.positions,
     mw: d.mw,

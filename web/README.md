@@ -59,6 +59,9 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
   is the mean of all pairwise distances in the merged cluster, as in Weka. Results can differ slightly from
   the modified Weka build used by GelJ, mainly for UPGMC and Ward.
 - The band-matching tolerance is a percentage of the molecular-weight range of all compared lanes (GelJ
-  used the range of the first lane), and matching is symmetrised.
+  used the range of the first lane), and bands are paired one-to-one with an optimal (symmetric) matching.
 - Euclidean and Manhattan distances are computed on profiles scaled to [0, 1] and averaged per point.
+- Where the migration model gives an undefined or non-positive molecular weight (e.g. logarithmic models
+  below the last marker band), the weight is interpolated log-linearly between the marker bands; GelJ kept
+  the model value.
 - Users, studies and the population-genetics exports (XSLT) of the desktop version are not included.
