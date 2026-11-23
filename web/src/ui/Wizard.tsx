@@ -14,7 +14,7 @@ import {
 } from '../core/image';
 import { gamma, median, subtractBackground } from '../core/filters';
 import { NormalisationError, normaliseLanes, validateReferences } from '../core/normalise';
-import type { GrayImage, Lab, Lane, Marker, Rect } from '../core/types';
+import type { GrayImage, Lab, Lane, Marker, PreprocessStep, Rect } from '../core/types';
 import { EMPTY_META } from '../core/types';
 import { uid } from '../core/uid';
 import { listMarkers, saveExperiment, saveMarker } from '../storage/db';
@@ -110,7 +110,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   const [work, setWork] = useState<WorkState>(initial);
   const [stepIndex, setStepIndex] = useState(startStep);
   const [maxStep, setMaxStep] = useState(Math.max(startStep, initial.lanes.length ? 6 : 0));
-  const [imageUndo, setImageUndo] = useState<GrayImage[]>([]);
+  const [imageUndo, setImageUndo] = useState<{ image: GrayImage; preprocessing: PreprocessStep[] | null }[]>([]);
   const [past, setPast] = useState<Lane[][]>([]);
   const [future, setFuture] = useState<Lane[][]>([]);
   const [sel, setSel] = useState<Selection>({ laneId: null, band: null });
@@ -208,21 +208,31 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   };
 
   // ---- Image operations (step 1) ------------------------------------------------------
-  const applyImageOp = (op: (img: GrayImage) => GrayImage, geometric: boolean) => {
+  /**
+   * Applies an image operation and records it (`record`) in the preprocessing list of the report;
+   * `record: null` restarts the list (revert to the original image).
+   */
+  const applyImageOp = (op: (img: GrayImage) => GrayImage, geometric: boolean, record: PreprocessStep | null) => {
     if (geometric && lanes.length > 0) {
       if (!window.confirm('Changing the geometry of the image removes the detected lanes and bands. Continue?')) return;
     }
-    setImageUndo((u) => [...u.slice(-19), image]);
-    setWork((w) => ({ ...w, image: op(w.image), lanes: geometric ? [] : w.lanes }));
+    setImageUndo((u) => [...u.slice(-19), { image, preprocessing: work.preprocessing }]);
+    setWork((w) => ({
+      ...w,
+      image: op(w.image),
+      lanes: geometric ? [] : w.lanes,
+      // Unknown history (experiments saved before it was recorded) stays unknown.
+      preprocessing: record === null ? [] : w.preprocessing && [...w.preprocessing, record],
+    }));
     if (geometric) resetLaneHistory();
   };
 
   /** Image operations that take a noticeable time: show the busy state before running them. */
-  const applySlowImageOp = (op: (img: GrayImage) => GrayImage) => {
+  const applySlowImageOp = (op: (img: GrayImage) => GrayImage, record: PreprocessStep) => {
     setBusy(true);
     setTimeout(() => {
       try {
-        applyImageOp(op, false);
+        applyImageOp(op, false, record);
       } finally {
         setBusy(false);
       }
@@ -230,11 +240,12 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
   };
 
   const undoImage = () => {
-    const prev = imageUndo[imageUndo.length - 1];
-    if (!prev) return;
+    const last = imageUndo[imageUndo.length - 1];
+    if (!last) return;
+    const prev = last.image;
     setImageUndo((u) => u.slice(0, -1));
     const sameSize = prev.width === image.width && prev.height === image.height;
-    setWork((w) => ({ ...w, image: prev, lanes: sameSize ? w.lanes : [] }));
+    setWork((w) => ({ ...w, image: prev, preprocessing: last.preprocessing, lanes: sameSize ? w.lanes : [] }));
     if (!sameSize) resetLaneHistory();
   };
 
@@ -769,7 +780,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           </p>
           <div className="row">
             <button className="primary" disabled={!cropRect || cropRect.w < 4 || cropRect.h < 4} onClick={() => {
-              applyImageOp((img) => crop(img, cropRect!), true);
+              applyImageOp((img) => crop(img, cropRect!), true, { op: 'crop', params: { ...cropRect! } });
               setCropRect(null);
             }}>
               Crop
@@ -786,7 +797,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
         <>
           <p className="instructions">Invert the colours of the image if needed (for instance, to work with a negative).</p>
           <div className="row">
-            <button onClick={() => applyImageOp(invert, false)}>Invert</button>
+            <button onClick={() => applyImageOp(invert, false, { op: 'invert' })}>Invert</button>
             <button onClick={undoImage} disabled={!imageUndo.length}>
               Undo
             </button>
@@ -801,7 +812,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
             Automatically stretch the brightness and contrast (0.35% saturated pixels), or adjust them manually and press <b>Apply</b>.
           </p>
           <div className="row">
-            <button onClick={() => applyImageOp((img) => enhanceContrast(img, 0.35), false)}>Auto adjust brightness/contrast</button>
+            <button onClick={() => applyImageOp((img) => enhanceContrast(img, 0.35), false, { op: 'autoContrast', params: { saturated: 0.35 } })}>Auto adjust brightness/contrast</button>
           </div>
           <div className="stack">
             <div className="slider-row">
@@ -819,7 +830,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
                 className="primary"
                 disabled={bc.brightness === 0 && bc.contrast === 0}
                 onClick={() => {
-                  applyImageOp((img) => brightnessContrast(img, bc.brightness, bc.contrast), false);
+                  applyImageOp((img) => brightnessContrast(img, bc.brightness, bc.contrast), false, { op: 'brightnessContrast', params: { ...bc } });
                   setBc({ brightness: 0, contrast: 0 });
                 }}
               >
@@ -839,10 +850,10 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
         <>
           <p className="instructions">Flip or rotate the image so that lanes are vertical and samples migrate from top to bottom.</p>
           <div className="row">
-            <button onClick={() => applyImageOp(flipHorizontal, true)}>Flip horizontally</button>
-            <button onClick={() => applyImageOp(flipVertical, true)}>Flip vertically</button>
-            <button onClick={() => applyImageOp((i) => rotate90(i, true), true)}>Rotate 90° left</button>
-            <button onClick={() => applyImageOp((i) => rotate90(i, false), true)}>Rotate 90° right</button>
+            <button onClick={() => applyImageOp(flipHorizontal, true, { op: 'flipHorizontal' })}>Flip horizontally</button>
+            <button onClick={() => applyImageOp(flipVertical, true, { op: 'flipVertical' })}>Flip vertically</button>
+            <button onClick={() => applyImageOp((i) => rotate90(i, true), true, { op: 'rotateLeft' })}>Rotate 90° left</button>
+            <button onClick={() => applyImageOp((i) => rotate90(i, false), true, { op: 'rotateRight' })}>Rotate 90° right</button>
             <button onClick={undoImage} disabled={!imageUndo.length}>
               Undo
             </button>
@@ -862,7 +873,7 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
               <input type="checkbox" checked={rollLight} onChange={(e) => setRollLight(e.target.checked)} />
               Light background
             </label>
-            <button disabled={busy} onClick={() => applySlowImageOp((img) => subtractBackground(img, rollRadius, rollLight))}>
+            <button disabled={busy} onClick={() => applySlowImageOp((img) => subtractBackground(img, rollRadius, rollLight), { op: 'subtractBackground', params: { radius: rollRadius, lightBackground: rollLight } })}>
               {busy ? 'Working…' : 'Subtract background'}
             </button>
           </div>
@@ -874,17 +885,17 @@ export function Wizard({ labs, initial, startStep, onClose }: Props) {
           </div>
           <div className="row">
             <button disabled={gammaValue === 1} onClick={() => {
-              applyImageOp((img) => gamma(img, gammaValue), false);
+              applyImageOp((img) => gamma(img, gammaValue), false, { op: 'gamma', params: { gamma: gammaValue } });
               setGammaValue(1);
             }}>
               Apply gamma
             </button>
-            <button disabled={busy} onClick={() => applySlowImageOp((img) => median(img, 1))} title="3×3 median filter: removes dust and speckle noise">
+            <button disabled={busy} onClick={() => applySlowImageOp((img) => median(img, 1), { op: 'median', params: { size: 3 } })} title="3×3 median filter: removes dust and speckle noise">
               Median filter (3×3)
             </button>
           </div>
           <button className="link small" style={{ alignSelf: 'flex-start' }} onClick={() => {
-            if (window.confirm('Discard every change made to the image?')) applyImageOp(() => work.original, true);
+            if (window.confirm('Discard every change made to the image?')) applyImageOp(() => work.original, true, null);
           }}>
             Revert to the original image
           </button>

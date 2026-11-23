@@ -720,3 +720,377 @@ table.grid td input[type='text'] {
     display: none;
   }
 }
+
+/* Printable reports (ui/Report.tsx): shown over the app as a sheet of paper; only the sheet is printed. */
+body.report-open #root {
+  display: none;
+}
+
+.report-root {
+  /* Always paper colours, also in dark mode; charts drawn in black and grey. */
+  --bg: #e4e7ec;
+  --surface: #fff;
+  --surface-2: #fff;
+  --border: #d9dde3;
+  --text: #111;
+  --muted: #444;
+  --accent: #111;
+  --accent-contrast: #fff;
+  --accent-soft: #eee;
+  --warn: #9a6700;
+  --ref: #555;
+  color-scheme: light;
+  background: #e4e7ec;
+  min-height: 100vh;
+  color: #111;
+  padding-bottom: 32px;
+}
+
+.report-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 10px 16px;
+  background: var(--surface);
+  color: var(--text);
+  border-bottom: 1px solid var(--border);
+}
+
+.report-toolbar .muted {
+  color: var(--warn);
+}
+
+.report-sheet {
+  background: #fff;
+  margin: 24px auto 0;
+  width: 210mm;
+  max-width: calc(100% - 16px);
+  padding: 14mm 13mm 15mm;
+  box-shadow: 0 2px 10px rgb(0 0 0 / 18%);
+  font-size: 9.5pt;
+  line-height: 1.35;
+}
+
+.paper-letter .report-sheet {
+  width: 8.5in;
+}
+
+.report-frame {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.report-frame > thead,
+.report-frame > tfoot {
+  display: table-header-group;
+}
+
+.report-frame > tfoot {
+  display: table-footer-group;
+}
+
+.report-frame > * > tr > td {
+  padding: 0;
+  vertical-align: top;
+}
+
+.report-running {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 7.5pt;
+  color: #444;
+}
+
+.report-running-head {
+  border-bottom: 0.5pt solid #888;
+  padding-bottom: 2mm;
+  margin-bottom: 4mm;
+}
+
+.report-running-foot {
+  border-top: 0.5pt solid #888;
+  padding-top: 2mm;
+  margin-top: 4mm;
+}
+
+.report-title h1 {
+  font-size: 17pt;
+  margin: 0;
+}
+
+.report-subtitle {
+  font-size: 12pt;
+  color: #333;
+  margin-bottom: 4mm;
+}
+
+.report-section {
+  margin-top: 5mm;
+}
+
+.report-section h2 {
+  font-size: 12pt;
+  margin: 0 0 2mm;
+  padding-bottom: 1mm;
+  border-bottom: 1pt solid #111;
+  break-after: avoid;
+}
+
+.report-section p {
+  margin: 0 0 2mm;
+}
+
+.report-note {
+  font-size: 8pt;
+  color: #444;
+}
+
+.report-methods {
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 10pt;
+  border-left: 2pt solid #888;
+  padding-left: 3mm;
+}
+
+.report-root .mono {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+  font-size: 0.92em;
+}
+
+.report-kv {
+  border-collapse: collapse;
+  width: 100%;
+  break-inside: avoid;
+}
+
+.report-kv th {
+  text-align: left;
+  font-weight: 600;
+  width: 34%;
+  padding: 0.6mm 3mm 0.6mm 0;
+  vertical-align: top;
+}
+
+.report-kv td {
+  padding: 0.6mm 0;
+}
+
+.report-kv tr,
+.report-table tr,
+.report-matrix tr {
+  break-inside: avoid;
+}
+
+.report-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 8pt;
+}
+
+.report-table th,
+.report-table td {
+  border: 0.5pt solid #999;
+  padding: 0.6mm 1.4mm;
+  text-align: left;
+  vertical-align: top;
+}
+
+.report-table thead th {
+  background: #eee;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.report-table thead {
+  display: table-header-group;
+}
+
+.report-table .num,
+.report-matrix .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-table .nowrap {
+  white-space: nowrap;
+}
+
+.report-table.compact td,
+.report-table.compact th {
+  padding: 0.3mm 1.4mm;
+}
+
+.report-bands {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 3mm 4mm;
+  align-items: start;
+}
+
+.report-bands table {
+  break-inside: avoid;
+}
+
+.report-checksums .mono {
+  word-break: break-all;
+  font-size: 7pt;
+}
+
+.report-figures {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 5mm;
+}
+
+.report-figures figure,
+.report-chart {
+  margin: 0;
+  break-inside: avoid;
+}
+
+.report-figures img {
+  display: block;
+  width: 100%;
+  max-height: 110mm;
+  object-fit: contain;
+  border: 0.5pt solid #999;
+  image-rendering: auto;
+}
+
+.report-root figcaption {
+  font-size: 8pt;
+  color: #444;
+  margin-top: 1mm;
+}
+
+.report-two-col {
+  display: grid;
+  grid-template-columns: 1.3fr 1fr;
+  gap: 5mm;
+  align-items: start;
+  margin-top: 3mm;
+  break-inside: avoid;
+}
+
+.report-chart .chart {
+  border: 0.5pt solid #999;
+  border-radius: 0;
+}
+
+.report-gel {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0 auto 2mm;
+  break-inside: avoid;
+}
+
+.report-dendrogram svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.report-matrix {
+  break-inside: avoid;
+  border-collapse: collapse;
+  font-size: 6.5pt;
+  margin-bottom: 4mm;
+  font-variant-numeric: tabular-nums;
+}
+
+.report-matrix th,
+.report-matrix td {
+  border: 0.4pt solid #aaa;
+  padding: 0.3mm 0.6mm;
+  text-align: center;
+  min-width: 4.2mm;
+  print-color-adjust: exact;
+  -webkit-print-color-adjust: exact;
+}
+
+.report-matrix th {
+  font-weight: 600;
+}
+
+.report-matrix th.name {
+  text-align: left;
+  white-space: nowrap;
+  max-width: 50mm;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.report-matrix th.vertical {
+  vertical-align: bottom;
+  padding: 0.6mm 0;
+}
+
+.report-matrix th.vertical span {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-weight: 500;
+}
+
+.report-bandmatrix td {
+  font-size: 6pt;
+  line-height: 1;
+}
+
+@media print {
+  html,
+  body,
+  .report-root {
+    background: #fff !important;
+  }
+
+  .report-root {
+    padding: 0;
+    min-height: 0;
+  }
+
+  .report-toolbar {
+    display: none;
+  }
+
+  .report-sheet {
+    width: auto;
+    max-width: none;
+    margin: 0;
+    padding: 0;
+    box-shadow: none;
+  }
+
+  .report-section.page-break {
+    break-before: page;
+  }
+
+  .report-section h2 + *,
+  .report-section h2 + .report-note + * {
+    break-before: avoid;
+  }
+
+  .report-section h2 + .report-note {
+    break-after: avoid;
+  }
+}
+
+@media screen and (max-width: 820px) {
+  .report-sheet {
+    padding: 8mm 6mm;
+    overflow-x: auto;
+  }
+
+  .report-figures,
+  .report-two-col {
+    grid-template-columns: 1fr;
+  }
+
+  .report-bands {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

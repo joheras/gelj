@@ -28,6 +28,18 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
     shown on the dendrogram and written in the Newick export.
   - **Band matching**: band classes built with the comparison tolerance and the binary presence/absence
     matrix, exported as CSV or NEXUS for population-genetics and phylogenetics software.
+- **Printable analysis reports** (print or save as PDF from the browser, A4 or US Letter, readable in black
+  and white) for lab records and methods sections:
+  - *Experiment report*: experiment, laboratory and dates, original and processed image, preprocessing
+    operations applied (with their parameters), lanes and metadata, reference lanes, marker and migration
+    model (formula, parameters, R², calibration chart and residuals), normalised gel with bands and the band
+    table (positions and molecular weights).
+  - *Comparison report*: settings (measure, tolerance, linkage, cut-off, bootstrap replicates), lanes with
+    their experiments and laboratories, dendrogram, clusters, cophenetic correlation, similarity matrix and
+    band-matching matrix.
+  - Both state the software version and build commit, the generation date and the SHA-256 checksum of every
+    image used, and suggest a methods paragraph. They are a print view (`src/ui/Report.tsx`) with print CSS,
+    so no PDF library is needed.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -44,6 +56,9 @@ npm run dev      # development server
 npm test         # unit tests of the algorithms (src/core)
 npm run build    # static build in dist/
 ```
+
+The analysis reports print the version from `package.json` and the commit of the build, taken from
+`GITHUB_SHA` (set by GitHub Actions) or `GELJ_COMMIT` (e.g. `GELJ_COMMIT=$(git rev-parse HEAD) npm run build`).
 
 ## Project layout
 

@@ -170,7 +170,7 @@ export default function App() {
         ) : (
           <div className="page empty">Loading…</div>
         ))}
-      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} />}
+      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} markers={markers} />}
       {route.page === 'markers' && <MarkersPage markers={markers} experiments={experiments} />}
       {route.page === 'labs' && <LabsPage labs={labs} experiments={experiments} defaultLabId={defaultLabId} />}
       {route.page === 'help' && <HelpPage />}

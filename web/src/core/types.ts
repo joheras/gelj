@@ -89,6 +89,13 @@ export function labLabel(lab: Lab | undefined | null): string {
   return place ? `${lab.name} (${place})` : lab.name;
 }
 
+/** An image operation applied in step 1 of the assistant, recorded for the analysis report. */
+export interface PreprocessStep {
+  /** Operation id, e.g. 'crop', 'invert', 'gamma', 'subtractBackground'. */
+  op: string;
+  params?: Record<string, number | string | boolean>;
+}
+
 export type ExperimentStatus = 'draft' | 'complete';
 
 export interface Experiment {
@@ -115,6 +122,8 @@ export interface Experiment {
   bandColour: string;
   /** Laboratory of the experiment (absent in data created before labs existed). */
   labId?: string | null;
+  /** Image operations applied to the original image, in order (absent in data created before they were recorded). */
+  preprocessing?: PreprocessStep[];
 }
 
 export type SimilarityMethod =

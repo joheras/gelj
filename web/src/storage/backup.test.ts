@@ -52,4 +52,16 @@ describe('backup import', () => {
     expect(b.experiments[0].status).toBe('draft');
     expect(b.markers).toEqual([]);
   });
+
+  it('keeps the recorded preprocessing operations and leaves them unknown in older backups', () => {
+    const b = parseBackup({
+      format: 'gelj-web',
+      experiments: [
+        { id: 'a', image: img, lanes: [], preprocessing: [{ op: 'gamma', params: { gamma: 0.8, bad: {} } }, { op: 'invert' }, 'junk'] },
+        { id: 'b', image: img, lanes: [] },
+      ],
+    });
+    expect(b.experiments[0].preprocessing).toEqual([{ op: 'gamma', params: { gamma: 0.8 } }, { op: 'invert', params: {} }]);
+    expect(b.experiments[1].preprocessing).toBeUndefined();
+  });
 });

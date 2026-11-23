@@ -2,7 +2,7 @@
 // fields missing in backups made by older versions get their default values.
 import { LINKAGES } from '../core/cluster';
 import { SIMILARITY_METHODS } from '../core/similarity';
-import type { Comparison, Experiment, Lab, Lane, Marker, NormalisedLane } from '../core/types';
+import type { Comparison, Experiment, Lab, Lane, Marker, NormalisedLane, PreprocessStep } from '../core/types';
 import { EMPTY_META } from '../core/types';
 
 export interface BackupContents {
@@ -88,7 +88,18 @@ function experiment(v: unknown): Experiment {
     normalised: norm,
     bandColour: str(v.bandColour, '#2f7dff'),
     labId: typeof v.labId === 'string' ? v.labId : null,
+    ...(Array.isArray(v.preprocessing) ? { preprocessing: preprocessing(v.preprocessing) } : {}),
   };
+}
+
+function preprocessing(v: unknown[]): PreprocessStep[] {
+  return v.filter(isObj).map((s) => {
+    const params: PreprocessStep['params'] = {};
+    if (isObj(s.params)) {
+      for (const [k, x] of Object.entries(s.params)) if (typeof x === 'number' || typeof x === 'string' || typeof x === 'boolean') params[k] = x;
+    }
+    return { op: str(s.op, 'unknown'), params };
+  });
 }
 
 function marker(v: unknown): Marker {

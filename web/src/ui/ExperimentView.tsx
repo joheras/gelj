@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { labLabel, type Experiment, type Lab, type Lane, type Marker } from '../core/types';
 import { saveExperiment } from '../storage/db';
+import { ExperimentReport } from './ExperimentReport';
 import { downloadText, safeFilename } from './imageio';
 import { LabSelect } from './Labs';
 import { LaneMetaEditor } from './Wizard';
@@ -19,6 +20,7 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
   const [name, setName] = useState(experiment.name);
   const [comments, setComments] = useState(experiment.comments);
   const [labId, setLabId] = useState<string | null>(experiment.labId ?? null);
+  const [report, setReport] = useState(false);
   const dirty =
     lanes !== experiment.lanes || name !== experiment.name || comments !== experiment.comments || labId !== (experiment.labId ?? null);
   const lab = labs.find((l) => l.id === labId);
@@ -44,6 +46,18 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
     downloadText(`${safeFilename(experiment.name)}-bands.csv`, rows.join('\n'), 'text/csv');
   };
 
+  if (report) {
+    return (
+      <ExperimentReport
+        experiment={{ ...experiment, name: name.trim() || experiment.name, comments, lanes, labId }}
+        marker={marker}
+        lab={lab}
+        unsaved={dirty}
+        onClose={() => setReport(false)}
+      />
+    );
+  }
+
   return (
     <div className="page">
       <div className="page-header">
@@ -55,6 +69,9 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
         <div className="row">
           <button onClick={onEdit}>Edit analysis</button>
           <button onClick={exportBands}>Bands CSV</button>
+          <button onClick={() => setReport(true)} title="Printable report of the analysis (print or save as PDF)">
+            Report
+          </button>
           <button className="primary" onClick={save} disabled={!dirty}>
             Save changes
           </button>

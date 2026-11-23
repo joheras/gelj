@@ -1,5 +1,5 @@
 import type { NormalisedLaneData } from '../core/normalise';
-import type { Experiment, GrayImage, Lane, NormalisedLane } from '../core/types';
+import type { Experiment, GrayImage, Lane, NormalisedLane, PreprocessStep } from '../core/types';
 import { uid } from '../core/uid';
 import { dataURLToGray, grayToPng } from './imageio';
 
@@ -17,6 +17,8 @@ export interface WorkState {
   referenceMw: number[];
   bandColour: string;
   labId: string | null;
+  /** Operations that turned `original` into `image`; null when unknown (experiments saved before they were recorded). */
+  preprocessing: PreprocessStep[] | null;
 }
 
 export function newWork(image: GrayImage, name: string, labId: string | null = null): WorkState {
@@ -33,6 +35,7 @@ export function newWork(image: GrayImage, name: string, labId: string | null = n
     referenceMw: [],
     bandColour: '#2f7dff',
     labId,
+    preprocessing: [],
   };
 }
 
@@ -51,6 +54,7 @@ export async function workFromExperiment(e: Experiment): Promise<WorkState> {
     referenceMw: e.referenceMw,
     bandColour: e.bandColour,
     labId: e.labId ?? null,
+    preprocessing: e.preprocessing ?? null,
   };
 }
 
@@ -80,6 +84,7 @@ export async function experimentFromWork(
     normalised,
     bandColour: w.bandColour,
     labId: w.labId,
+    ...(w.preprocessing ? { preprocessing: w.preprocessing } : {}),
   };
 }
 
