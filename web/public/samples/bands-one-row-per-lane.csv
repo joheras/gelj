@@ -1,0 +1,7 @@
+Isolate;Strain;Genus;Species;Country;ST;Band 1 (kb);Band 2 (kb);Band 3 (kb);Band 4 (kb);Band 5 (kb);Band 6 (kb)
+IMP-01;EC-101;Escherichia;coli;Spain;ST131;2,610;1,395;0,948;0,612;0,331;0,181
+IMP-02;EC-102;Escherichia;coli;Spain;ST131;2,590;1,410;0,880;0,605;0,328;
+IMP-03;EC-210;Escherichia;coli;France;ST73;1,810;1,095;0,725;0,452;0,249;0,151
+IMP-04;EC-211;Escherichia;coli;France;ST73;2,400;1,290;0,825;0,518;0,262;0,131
+IMP-05;KP-007;Klebsiella;pneumoniae;Portugal;ST258;2,900;2,000;1,250;0,700;0,390;0,210
+IMP-06;KP-008;Klebsiella;pneumoniae;Portugal;ST258;2,900;2,000;1,250;0,700;0,390;

@@ -153,7 +153,11 @@ export function ComparePage({
       return n;
     });
 
-  const markersUsed = new Set(entries.filter((e) => selected.has(e.key)).map((e) => e.exp.markerId));
+  const markersUsed = new Set(entries.filter((e) => selected.has(e.key) && !e.exp.bandTable).map((e) => e.exp.markerId));
+  // Lanes imported from band tables have band values but no densitometric curve.
+  const selectedEntries = entries.filter((e) => selected.has(e.key));
+  const bandOnly = selectedEntries.filter((e) => e.norm.profile.length === 0).length;
+  const positionValues = selectedEntries.filter((e) => e.exp.bandTable?.values === 'position').length;
 
   const run = async (opts?: Partial<Comparison>) => {
     setError(null);
@@ -168,6 +172,13 @@ export function ComparePage({
     const chosen = entries.filter((e) => keys.has(e.key));
     if (chosen.length < 2) {
       setError('Select at least two lanes.');
+      return;
+    }
+    const noCurve = chosen.filter((e) => e.norm.profile.length === 0).length;
+    if (!isBandBased(sim) && noCurve > 0) {
+      setError(
+        `${sim} compares densitometric curves, but ${noCurve} of the selected lanes were imported from a band table and have only band values. Use a band-based coefficient (Dice, Jaccard…) or deselect them.`,
+      );
       return;
     }
     setRunning(true);
@@ -391,6 +402,11 @@ export function ComparePage({
                           <td colSpan={3}>
                             {list[0].exp.name}
                             {list[0].lab && <span className="muted" style={{ fontWeight: 400 }}> · {list[0].lab.name}</span>}
+                            {list[0].exp.bandTable && (
+                              <span className="badge" style={{ marginLeft: 6 }} title="Imported band table: band-based coefficients only">
+                                table
+                              </span>
+                            )}
                           </td>
                         </tr>
                         {list.map((e) => (
@@ -430,9 +446,11 @@ export function ComparePage({
                     <option key={m}>{m}</option>
                   ))}
                 </optgroup>
-                <optgroup label="Densitometric curve">
+                <optgroup label={bandOnly ? 'Densitometric curve (needs gel lanes only)' : 'Densitometric curve'}>
                   {SIMILARITY_METHODS.filter((m) => !isBandBased(m)).map((m) => (
-                    <option key={m}>{m}</option>
+                    <option key={m} disabled={bandOnly > 0}>
+                      {m}
+                    </option>
                   ))}
                 </optgroup>
               </select>
@@ -482,6 +500,18 @@ export function ComparePage({
                 ))}
               </div>
             </div>
+            {bandOnly > 0 && (
+              <div className={`alert small ${isBandBased(similarity) ? '' : 'error'}`}>
+                {bandOnly} selected lane{bandOnly > 1 ? 's were' : ' was'} imported from a band table: only band-based coefficients can be
+                used, because imported lanes have no densitometric curve.
+              </div>
+            )}
+            {positionValues > 0 && positionValues < selected.size && (
+              <div className="alert warn small">
+                {positionValues} selected lane{positionValues > 1 ? 's have' : ' has'} band positions (% of a normalised gel) instead of
+                molecular weights; comparing them with other lanes is not meaningful.
+              </div>
+            )}
             {markersUsed.size > 1 && (
               <div className="alert warn small">
                 The selected lanes were normalised with different markers. Band-based measures compare molecular weights; curve-based measures

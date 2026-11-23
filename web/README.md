@@ -43,6 +43,12 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
   similarity, matched and unmatched bands, the closest reference of another type and the lane next to
   its best matches; a batch summary and the ranked matches are exported as CSV. The library is kept in
   IndexedDB and in JSON backups.
+- **Band-table import** for users of GelCompar II / BioNumerics (and GelJ or spreadsheets): band-matching
+  or character tables, one row per band or one row per lane (CSV, TSV, text), with column mapping,
+  preview and validation. Imported lanes have no image; they are drawn from their bands and compared with
+  gel lanes using band-based coefficients. See
+  [docs/migration-from-gelcompar.md](docs/migration-from-gelcompar.md) and the samples in
+  `public/samples/`.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -70,7 +76,8 @@ npm run build    # static build in dist/
 - `src/core/` — algorithms ported from the Java version, independent of the UI:
   image operations, peak finding (ImageJ `MaximumFinder`), lane/band detection, curve fitting,
   spline, normalisation, similarity measures and clustering, background subtraction and filters,
-  band matching, dendrogram cut-off and bootstrap, identification against the reference library.
+  band matching, dendrogram cut-off and bootstrap, identification against the reference library,
+  band-table parsing (`bandtable.ts`).
 - `src/storage/` — IndexedDB persistence and JSON import/export.
 - `src/ui/` — React interface.
 - `src/pwa.ts`, `pwa/` — offline/installable app: `pwa/sw.js` is the service-worker template and
@@ -110,6 +117,8 @@ HTTPS or `localhost`.
 - Cut-off clusters, bootstrap support, optimisation and the tolerance analysis are not available in the
   desktop version. The optimisation shifts molecular weights (the units of the tolerance), while
   GelCompar II shifts positions along the normalised lane; band classes and the bootstrap do not use it.
+
+Moving from GelCompar II or BioNumerics? See [docs/migration-from-gelcompar.md](docs/migration-from-gelcompar.md).
 
 See [docs/comparison.md](docs/comparison.md) for a comparison with GelJ desktop, GelCompar II/BioNumerics,
 PyElph, GelClust, GelAnalyzer, ImageJ/Fiji and GelGenie, and the list of proposed improvements.
