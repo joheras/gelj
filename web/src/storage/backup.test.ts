@@ -52,4 +52,15 @@ describe('backup import', () => {
     expect(b.experiments[0].status).toBe('draft');
     expect(b.markers).toEqual([]);
   });
+
+  it('keeps the provenance of experiments imported from band tables', () => {
+    const e = { id: 'e', image: img, status: 'complete', lanes: [], normalised: [{ laneId: 'l', image: img, positions: [], mw: [] }] };
+    const b = parseBackup({
+      format: 'gelj-web',
+      experiments: [{ ...e, bandTable: { file: 't.csv', layout: 'matrix', values: 'position' } }, e, { ...e, bandTable: { layout: 'odd' } }],
+    });
+    expect(b.experiments[0].bandTable).toEqual({ file: 't.csv', layout: 'matrix', values: 'position' });
+    expect(b.experiments[1].bandTable).toBeUndefined();
+    expect(b.experiments[2].bandTable).toEqual({ file: '', layout: 'long', values: 'mw' });
+  });
 });

@@ -53,7 +53,7 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
           <span className="badge ok">Complete</span>
         </div>
         <div className="row">
-          <button onClick={onEdit}>Edit analysis</button>
+          {!experiment.bandTable && <button onClick={onEdit}>Edit analysis</button>}
           <button onClick={exportBands}>Bands CSV</button>
           <button className="primary" onClick={save} disabled={!dirty}>
             Save changes
@@ -82,12 +82,28 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
                 Laboratory: <b>{labLabel(lab)}</b> ·{' '}
               </>
             )}
-            Marker: <b>{marker?.name ?? 'unknown'}</b> · {experiment.lanes.length} lanes · {experiment.darkBackground ? 'dark' : 'light'}{' '}
-            background · created {new Date(experiment.createdAt).toLocaleDateString()}
+            {experiment.bandTable ? (
+              <>
+                Imported band table: <b>{experiment.bandTable.file}</b> · {experiment.lanes.length} lanes · band values are{' '}
+                {experiment.bandTable.values === 'mw' ? 'molecular weights' : 'positions (% of the normalised gel)'} · imported{' '}
+                {new Date(experiment.createdAt).toLocaleDateString()}
+              </>
+            ) : (
+              <>
+                Marker: <b>{marker?.name ?? 'unknown'}</b> · {experiment.lanes.length} lanes · {experiment.darkBackground ? 'dark' : 'light'}{' '}
+                background · created {new Date(experiment.createdAt).toLocaleDateString()}
+              </>
+            )}
           </div>
         </div>
         <div className="card stack">
-          <h3>Normalised gel</h3>
+          <h3>{experiment.bandTable ? 'Virtual gel' : 'Normalised gel'}</h3>
+          {experiment.bandTable && (
+            <span className="small muted">
+              Lanes drawn from the imported bands ({experiment.bandTable.values === 'mw' ? 'log molecular-weight scale' : 'positions'}). They
+              have no densitometric curve, so they are compared with band-based coefficients only.
+            </span>
+          )}
           <div className="montage">
             <div style={{ display: 'flex', gap: 6 }}>
               {lanes.map((l) => {

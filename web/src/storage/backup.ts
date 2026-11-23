@@ -88,7 +88,14 @@ function experiment(v: unknown): Experiment {
     normalised: norm,
     bandColour: str(v.bandColour, '#2f7dff'),
     labId: typeof v.labId === 'string' ? v.labId : null,
+    ...(bandTableSource(v.bandTable) ?? {}),
   };
+}
+
+function bandTableSource(v: unknown): Pick<Experiment, 'bandTable'> | null {
+  if (!isObj(v)) return null;
+  const layout = v.layout === 'long' || v.layout === 'wide' || v.layout === 'matrix' ? v.layout : 'long';
+  return { bandTable: { file: str(v.file), layout, values: v.values === 'position' ? 'position' : 'mw' } };
 }
 
 function marker(v: unknown): Marker {

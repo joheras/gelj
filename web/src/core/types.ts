@@ -115,6 +115,16 @@ export interface Experiment {
   bandColour: string;
   /** Laboratory of the experiment (absent in data created before labs existed). */
   labId?: string | null;
+  /** Set for experiments imported from a band table: their lane images are drawn from the bands, and their profiles are empty. */
+  bandTable?: BandTableSource;
+}
+
+/** Provenance of an experiment imported from a band table (GelCompar II / BioNumerics, spreadsheets…). */
+export interface BandTableSource {
+  file: string;
+  layout: 'long' | 'wide' | 'matrix';
+  /** Band values are molecular weights, or positions in % of a normalised gel (comparable only within one reference system). */
+  values: 'mw' | 'position';
 }
 
 export type SimilarityMethod =

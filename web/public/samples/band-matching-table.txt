@@ -1,0 +1,7 @@
+Key	Strain	Genus	Species	Country	MLST	2900	2600	2400	2000	1810	1402	1290	1250	1095	948	880	825	725	700	608	518	452	390	330	262	249	210	181	151	131
+IMP-01	EC-101	Escherichia	coli	Spain	ST131	0	1	0	0	0	1	0	0	0	1	0	0	0	0	1	0	0	0	1	0	0	0	1	0	0
+IMP-02	EC-102	Escherichia	coli	Spain	ST131	0	1	0	0	0	1	0	0	0	0	1	0	0	0	1	0	0	0	1	0	0	0	0	0	0
+IMP-03	EC-210	Escherichia	coli	France	ST73	0	0	0	0	1	0	0	0	1	0	0	0	1	0	0	0	1	0	0	0	1	0	0	1	0
+IMP-04	EC-211	Escherichia	coli	France	ST73	0	0	1	0	0	0	1	0	0	0	0	1	0	0	0	1	0	0	0	1	0	0	0	0	1
+IMP-05	KP-007	Klebsiella	pneumoniae	Portugal	ST258	1	0	0	1	0	0	0	1	0	0	0	0	0	1	0	0	0	1	0	0	0	1	0	0	0
+IMP-06	KP-008	Klebsiella	pneumoniae	Portugal	ST258	1	0	0	1	0	0	0	1	0	0	0	0	0	1	0	0	0	1	0	0	0	0	0	0	0

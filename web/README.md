@@ -28,6 +28,12 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
     shown on the dendrogram and written in the Newick export.
   - **Band matching**: band classes built with the comparison tolerance and the binary presence/absence
     matrix, exported as CSV or NEXUS for population-genetics and phylogenetics software.
+- **Band-table import** for users of GelCompar II / BioNumerics (and GelJ or spreadsheets): band-matching
+  or character tables, one row per band or one row per lane (CSV, TSV, text), with column mapping,
+  preview and validation. Imported lanes have no image; they are drawn from their bands and compared with
+  gel lanes using band-based coefficients. See
+  [docs/migration-from-gelcompar.md](docs/migration-from-gelcompar.md) and the samples in
+  `public/samples/`.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -50,7 +56,7 @@ npm run build    # static build in dist/
 - `src/core/` — algorithms ported from the Java version, independent of the UI:
   image operations, peak finding (ImageJ `MaximumFinder`), lane/band detection, curve fitting,
   spline, normalisation, similarity measures and clustering, background subtraction and filters,
-  band matching, dendrogram cut-off and bootstrap.
+  band matching, dendrogram cut-off and bootstrap, band-table parsing (`bandtable.ts`).
 - `src/storage/` — IndexedDB persistence and JSON import/export.
 - `src/ui/` — React interface.
 
@@ -79,6 +85,8 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
   8 px on the shrunk image), so results can differ by a few grey levels; ImageJ's options (sliding
   paraboloid, smoothing, separate background image) are not offered.
 - Cut-off clusters and bootstrap support are not available in the desktop version.
+
+Moving from GelCompar II or BioNumerics? See [docs/migration-from-gelcompar.md](docs/migration-from-gelcompar.md).
 
 See [docs/comparison.md](docs/comparison.md) for a comparison with GelJ desktop, GelCompar II/BioNumerics,
 PyElph, GelClust, GelAnalyzer, ImageJ/Fiji and GelGenie, and the list of proposed improvements.

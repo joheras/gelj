@@ -68,6 +68,24 @@ export function HelpPage() {
           </ul>
         </div>
         <div className="card">
+          <h3>Coming from GelCompar II or BioNumerics</h3>
+          <p>
+            Use <i>Import band table</i> on the Experiments page to bring band data exported from GelCompar II / BioNumerics (band-matching or
+            character tables, lists of bands), GelJ or a spreadsheet as CSV or tab-delimited text. Map the columns (lane key, strain, genus,
+            species, country, MLST, comments, laboratory, bands), check the preview and import: each table becomes an experiment of lanes
+            drawn from their bands.
+          </p>
+          <p style={{ margin: 0 }}>
+            Imported lanes have molecular weights but no densitometric curve, so they are compared with band-based coefficients only
+            (Dice, Jaccard…). Weights estimated by different software differ by a few per cent: raise the tolerance until known duplicates
+            match. The{' '}
+            <a href="https://github.com/joheras/gelj/blob/main/web/docs/migration-from-gelcompar.md" target="_blank" rel="noreferrer">
+              migration guide
+            </a>{' '}
+            maps reference systems, tolerance, coefficients, clustering and cut-offs to GelJ Web and lists the supported layouts.
+          </p>
+        </div>
+        <div className="card">
           <h3>Keyboard shortcuts</h3>
           <table className="grid small">
             <tbody>

@@ -3,6 +3,7 @@ import { BUILTIN_MARKERS } from '../core/markers';
 import { SAMPLE_PROFILES, syntheticGel } from '../core/synthetic';
 import type { Experiment, Lab, Marker } from '../core/types';
 import { deleteExperiment, exportBackup, getDefaultLabId, importBackup } from '../storage/db';
+import { BandTableImport } from './BandTableImport';
 import { downloadText, fileToGray, safeFilename } from './imageio';
 import { newWork, type WorkState } from './experimentio';
 
@@ -20,6 +21,7 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
   const importRef = useRef<HTMLInputElement>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [bandTable, setBandTable] = useState(false);
 
   const openImage = async (file: File) => {
     setError(null);
@@ -65,6 +67,22 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
   };
 
   const markerName = (id: string | null) => markers.find((m) => m.id === id)?.name ?? '—';
+
+  if (bandTable) {
+    return (
+      <div className="page">
+        <BandTableImport
+          labs={labs}
+          defaultLabId={defaultLab()}
+          onCancel={() => setBandTable(false)}
+          onDone={(msg) => {
+            setBandTable(false);
+            notify(msg);
+          }}
+        />
+      </div>
+    );
+  }
   const labName = (id: string | null | undefined) => labs.find((l) => l.id === id)?.name;
 
   return (
@@ -76,7 +94,12 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
             {loading ? 'Opening…' : 'New experiment from image'}
           </button>
           <button onClick={sample}>Try a sample gel</button>
-          <button onClick={() => importRef.current?.click()}>Import</button>
+          <button onClick={() => importRef.current?.click()} title="Restore a GelJ Web backup (.json)">
+            Import
+          </button>
+          <button onClick={() => setBandTable(true)} title="Bands from GelCompar II, BioNumerics, GelJ or a spreadsheet (CSV, TSV)">
+            Import band table
+          </button>
           <button onClick={exportAll} disabled={experiments.length === 0}>
             Export all
           </button>
@@ -119,6 +142,9 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
           <p>
             Open a gel image (TIFF, PNG, JPEG…) or drop it here to start the analysis assistant, or try the sample gel to see how it works.
           </p>
+          <p>
+            Coming from GelCompar II or BioNumerics? Use <i>Import band table</i> to bring your band data (CSV/TSV) and compare it with new gels.
+          </p>
           <p className="small">Your images and results are stored only in this browser. Use Export to keep a backup.</p>
         </div>
       ) : (
@@ -134,10 +160,11 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
                     {e.name}
                   </span>
                   <span className="spacer" />
+                  {e.bandTable && <span className="badge" title={`Imported from ${e.bandTable.file}`}>Band table</span>}
                   {e.status === 'complete' ? <span className="badge ok">Complete</span> : <span className="badge warn">Draft</span>}
                 </div>
                 <div className="small muted">
-                  {e.lanes.length} lanes · {markerName(e.markerId)}
+                  {e.lanes.length} lanes · {e.bandTable ? `imported from ${e.bandTable.file}` : markerName(e.markerId)}
                   {labName(e.labId) && (
                     <>
                       <br />
