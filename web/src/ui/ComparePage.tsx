@@ -4,13 +4,14 @@ import { Bootstrap, bootstrapData } from '../core/bootstrap';
 import { cluster, copheneticCorrelation, leafOrder, LINKAGES, toNewick, type ClusterNode } from '../core/cluster';
 import { rotate90 } from '../core/image';
 import { distanceMatrix, isBandBased, isCoefficient, mwTolerance, SIMILARITY_METHODS } from '../core/similarity';
-import type { Comparison, Experiment, Lab, Lane, Linkage, NormalisedLane, OutputMode, SimilarityMethod } from '../core/types';
+import type { Comparison, Experiment, Lab, Lane, Linkage, Marker, NormalisedLane, OutputMode, SimilarityMethod } from '../core/types';
 import { uid } from '../core/uid';
 import { deleteComparison, listComparisons, saveComparison } from '../storage/db';
 import { cutTree, similarityToHeight } from '../core/treecut';
 import { CLUSTER_COLOURS } from './clusterColours';
 import { Dendrogram, type DendroCut, type DendroLeaf } from './Dendrogram';
 import { svgToPngBlob, svgToString } from './svgexport';
+import { ComparisonReport } from './ComparisonReport';
 import { dataURLToGray, downloadBlob, downloadText, grayToPng, safeFilename } from './imageio';
 import { OptimisePanel } from './OptimisePanel';
 
@@ -56,6 +57,9 @@ interface Result {
   leaves: DendroLeaf[];
   headers: string[];
   names: string[];
+  /** Tolerance as entered (% of the molecular-weight range). */
+  tolerancePercent: number;
+  output: OutputMode;
   similarity: SimilarityMethod;
   linkage: Linkage;
   matching: BandMatching;
@@ -86,10 +90,12 @@ async function rotatedLaneImage(n: NormalisedLane): Promise<string> {
 export function ComparePage({
   experiments,
   labs,
+  markers = [],
   onIdentify,
 }: {
   experiments: Experiment[];
   labs: Lab[];
+  markers?: Marker[];
   /** Identify the given lanes against the reference library. */
   onIdentify?: (laneRefs: string[]) => void;
 }) {
@@ -123,6 +129,8 @@ export function ComparePage({
   const [replicates, setReplicates] = useState(100);
   const [support, setSupport] = useState<Map<ClusterNode, number> | null>(null);
   const [bootProgress, setBootProgress] = useState<number | null>(null);
+  const [bootReplicates, setBootReplicates] = useState<number | null>(null);
+  const [report, setReport] = useState(false);
   const bootToken = useRef(0);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,6 +230,8 @@ export function ComparePage({
         leaves,
         headers,
         names: chosen.map((e) => `${e.exp.name} ${e.lane.name}`),
+        tolerancePercent: tol,
+        output: out,
         similarity: sim,
         linkage: link,
         matching: matchBands(lanes.map((l) => l.mw), tolAbs),
@@ -291,6 +301,7 @@ export function ComparePage({
       bs.run(Math.min(BOOTSTRAP_BATCH, total - bs.replicates));
       if (bs.replicates >= total) {
         setSupport(bs.support());
+        setBootReplicates(bs.replicates);
         setBootProgress(null);
       } else {
         setBootProgress(bs.replicates / total);
@@ -332,6 +343,26 @@ export function ComparePage({
     ];
     downloadText(`${base}-matrix.csv`, rows.join('\n'), 'text/csv');
   };
+
+  if (report && result) {
+    return (
+      <ComparisonReport
+        result={result}
+        tolerancePercent={result.tolerancePercent}
+        output={result.output}
+        cut={cut}
+        support={support}
+        replicates={bootReplicates}
+        markers={markers}
+        extraSettings={
+          result.optimisation > 0
+            ? [['Optimisation', `Lanes may shift by up to ±${Number(result.optimisation.toPrecision(4))} before their bands are matched`]]
+            : []
+        }
+        onClose={() => setReport(false)}
+      />
+    );
+  }
 
   if (complete.length === 0) {
     return (
@@ -605,6 +636,9 @@ export function ComparePage({
                   {result.optimisation > 0 && ` · optimisation ±${result.optimisation.toPrecision(3)}`}
                 </span>
                 <span className="spacer" />
+                <button onClick={() => setReport(true)} title="Printable report of the comparison (print or save as PDF)">
+                  Report
+                </button>
                 <label className="check small">
                   <input type="checkbox" checked={showValues} onChange={(e) => setShowValues(e.target.checked)} />
                   Node values

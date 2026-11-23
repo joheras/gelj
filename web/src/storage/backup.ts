@@ -3,7 +3,7 @@
 import { LINKAGES } from '../core/cluster';
 import type { LibraryEntry } from '../core/identify';
 import { SIMILARITY_METHODS } from '../core/similarity';
-import type { Comparison, Experiment, Lab, Lane, Marker, NormalisedLane } from '../core/types';
+import type { Comparison, Experiment, Lab, Lane, Marker, NormalisedLane, PreprocessStep } from '../core/types';
 import { EMPTY_META } from '../core/types';
 
 export interface BackupContents {
@@ -91,6 +91,7 @@ function experiment(v: unknown): Experiment {
     bandColour: str(v.bandColour, '#2f7dff'),
     labId: typeof v.labId === 'string' ? v.labId : null,
     ...(bandTableSource(v.bandTable) ?? {}),
+    ...(Array.isArray(v.preprocessing) ? { preprocessing: preprocessing(v.preprocessing) } : {}),
   };
 }
 
@@ -98,6 +99,16 @@ function bandTableSource(v: unknown): Pick<Experiment, 'bandTable'> | null {
   if (!isObj(v)) return null;
   const layout = v.layout === 'long' || v.layout === 'wide' || v.layout === 'matrix' ? v.layout : 'long';
   return { bandTable: { file: str(v.file), layout, values: v.values === 'position' ? 'position' : 'mw' } };
+}
+
+function preprocessing(v: unknown[]): PreprocessStep[] {
+  return v.filter(isObj).map((s) => {
+    const params: PreprocessStep['params'] = {};
+    if (isObj(s.params)) {
+      for (const [k, x] of Object.entries(s.params)) if (typeof x === 'number' || typeof x === 'string' || typeof x === 'boolean') params[k] = x;
+    }
+    return { op: str(s.op, 'unknown'), params };
+  });
 }
 
 function marker(v: unknown): Marker {

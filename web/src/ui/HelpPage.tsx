@@ -128,6 +128,30 @@ export function HelpPage() {
           </p>
         </div>
         <div className="card">
+          <h3>Analysis reports</h3>
+          <p>
+            <i>Report</i> on an experiment page, and on the Compare page once a comparison has been computed, opens a printable report for lab
+            records or the methods section of a publication. Choose A4 or US Letter and press <i>Print / Save as PDF</i>; in the print dialog,
+            choose <i>Save as PDF</i> as the destination to obtain a PDF. Press <i>Back</i> (or Esc) to return.
+          </p>
+          <ul>
+            <li>
+              <b>Experiment report</b> — experiment, laboratory and dates; original and processed image; the preprocessing operations applied
+              (recorded for experiments analysed from this version on); lanes and their metadata; reference lanes, marker and migration model
+              (formula, parameters, R² and calibration chart); normalised gel with its bands; and the table of band positions and molecular
+              weights.
+            </li>
+            <li>
+              <b>Comparison report</b> — every setting (similarity measure, tolerance, linkage, cut-off, bootstrap replicates), the lanes with
+              their experiments and laboratories, dendrogram, clusters, cophenetic correlation, similarity matrix and band-matching matrix.
+            </li>
+          </ul>
+          <p className="small muted" style={{ margin: 0 }}>
+            Both include the software version and build, the generation date, a SHA-256 checksum of every image used (to verify that an
+            exported image is the one analysed) and a suggested methods paragraph. They are designed to be readable in black and white.
+          </p>
+        </div>
+        <div className="card">
           <h3>Keyboard shortcuts</h3>
           <table className="grid small">
             <tbody>

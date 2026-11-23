@@ -187,7 +187,7 @@ export default function App() {
         ) : (
           <div className="page empty">Loading…</div>
         ))}
-      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} onIdentify={identifyLanes} />}
+      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} markers={markers} onIdentify={identifyLanes} />}
       {route.page === 'library' && (
         <LibraryPage
           key={route.queries?.join() ?? ''}
