@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { Experiment, Lab, Marker } from './core/types';
 import { getDefaultLabId, listExperiments, listLabs, listMarkers, onChange } from './storage/db';
+import { AppStatus } from './ui/AppStatus';
 import { ComparePage } from './ui/ComparePage';
 import { workFromExperiment, type WorkState } from './ui/experimentio';
 import { ExperimentsPage } from './ui/ExperimentsPage';
@@ -126,6 +127,7 @@ export default function App() {
             </button>
           ))}
         </nav>
+        <AppStatus />
       </header>
       {loadingExp && <div className="toast">Loading experiment…</div>}
       {toast && <div className="toast">{toast}</div>}

@@ -1,3 +1,5 @@
+import { OfflineCard } from './AppStatus';
+
 export function HelpPage() {
   return (
     <div className="page" style={{ maxWidth: 860 }}>
@@ -11,7 +13,8 @@ export function HelpPage() {
           </p>
           <p className="small muted" style={{ margin: 0 }}>
             <b>Privacy:</b> everything runs in your browser. Images and results are stored locally (IndexedDB) and are never uploaded. Use{' '}
-            <i>Export</i> on the Experiments page to back up your data or move it to another computer.
+            <i>Export</i> on the Experiments page to back up your data or move it to another computer. After the first visit GelJ Web
+            also works offline and can be installed as an app (see <i>Offline use and storage</i> below).
           </p>
         </div>
         <div className="card">
@@ -67,6 +70,7 @@ export function HelpPage() {
             </li>
           </ul>
         </div>
+        <OfflineCard />
         <div className="card">
           <h3>Keyboard shortcuts</h3>
           <table className="grid small">

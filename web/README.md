@@ -33,6 +33,11 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
   included in the bands CSV and in exports.
 - Opens TIFF (8/16-bit), PNG, JPEG, GIF, BMP and WebP images.
+- **Installable and offline**: after the first visit the app works with no network connection and can be
+  installed as a desktop/mobile app (*Install app* in the top bar on Chrome/Edge, or the browser's install /
+  *Add to Home Screen* menu). New versions are announced with a *Reload* prompt instead of being switched
+  silently. The Help page shows the storage used and lets you request persistent storage so the browser
+  does not evict the data.
 
 ## Development
 
@@ -53,13 +58,22 @@ npm run build    # static build in dist/
   band matching, dendrogram cut-off and bootstrap.
 - `src/storage/` — IndexedDB persistence and JSON import/export.
 - `src/ui/` — React interface.
+- `src/pwa.ts`, `pwa/` — offline/installable app: `pwa/sw.js` is the service-worker template and
+  `pwa/plugin.js` a Vite plugin that, after `vite build`, writes `dist/sw.js` with the list of all built
+  files to precache and a version hash of their contents (no service worker in `npm run dev`).
+  `public/manifest.webmanifest` is the web app manifest; `scripts/icons.sh` regenerates `public/icons/` from
+  `public/favicon.svg` (ImageMagick).
 
 ## Deployment on GitHub Pages
 
 The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds this folder and publishes
 `dist/` on every push to `main`/`master` that touches `web/`. In the repository settings, set
 **Pages → Build and deployment → Source** to **GitHub Actions**. The build uses relative paths
-(`base: './'`), so it works under any `https://<user>.github.io/<repo>/` URL.
+(`base: './'`), so it works under any `https://<user>.github.io/<repo>/` URL; the manifest's `start_url`
+and `scope` and the service worker's scope are relative too. To try the offline build locally, serve
+`dist/` (e.g. copy it to `<dir>/gelj/` and run `python3 -m http.server --directory <dir>`), open
+`http://localhost:8000/gelj/` once and stop the server: the app keeps working. Service workers need
+HTTPS or `localhost`.
 
 ## Differences from the desktop version
 
