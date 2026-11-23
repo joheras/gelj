@@ -720,3 +720,41 @@ table.grid td input[type='text'] {
     display: none;
   }
 }
+
+/* Installable / offline app (src/pwa.ts, src/ui/AppStatus.tsx) */
+.app-status {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-status:empty {
+  display: none;
+}
+
+.app-status button.small,
+.update-banner button.small {
+  padding: 3px 10px;
+}
+
+.update-banner {
+  position: fixed;
+  bottom: 16px;
+  right: 16px;
+  z-index: 70;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  background: var(--surface);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  box-shadow: 0 4px 16px rgb(16 24 40 / 18%);
+}
+
+@media (max-width: 600px) {
+  .update-banner {
+    left: 16px;
+  }
+}
