@@ -84,6 +84,32 @@ export function HelpPage() {
         </div>
         <OfflineCard />
         <div className="card">
+          <h3>Reference library and identification</h3>
+          <ul>
+            <li>
+              <b>Building the library</b> — on the <i>Library</i> page, select lanes of known type from complete experiments and add them
+              with a type name (pulsotype, ribotype, species…), or take the type from each lane&apos;s genus and species, species, MLST or
+              strain number. Marker lanes cannot be references. Filter the library by type, click a type to change it for one lane, use{' '}
+              <i>Rename type…</i> to rename every lane of a type, and <i>Remove</i> to take a lane out of the library (the experiment is not
+              changed). The library is included in backups.
+            </li>
+            <li>
+              <b>Identifying lanes</b> — select one or several lanes and press <i>Identify</i> (also available per lane on the experiment page,
+              and for the selected lanes on the comparison page). Every library lane is ranked by its similarity to each lane with the chosen
+              measure; band-based measures use the tolerance as a percentage of the molecular-weight range of the lane and the library, so
+              lanes normalised with different markers are compared through their molecular weights. A lane is <i>identified</i> as the type
+              of its closest reference when the similarity reaches the cut-off (or, for Euclidean and Manhattan, the distance stays below it);
+              otherwise it is shown as unidentified. A lane in the library is never matched with itself.
+            </li>
+            <li>
+              <b>Reading the result</b> — with several lanes, a summary gives the identified type, the best match and the closest reference
+              of <i>another</i> type: a small gap between the two means an uncertain identification. Click a lane to see its ranked matches
+              with the matched and unmatched bands (molecular weights) and the lane next to its closest references (green: matched band, red:
+              unmatched). <i>Summary CSV</i> and <i>Matches CSV</i> export the results.
+            </li>
+          </ul>
+        </div>
+        <div className="card">
           <h3>Keyboard shortcuts</h3>
           <table className="grid small">
             <tbody>

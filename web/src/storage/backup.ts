@@ -1,6 +1,7 @@
 // Validation of imported backups: malformed records are rejected before anything is written, and
 // fields missing in backups made by older versions get their default values.
 import { LINKAGES } from '../core/cluster';
+import type { LibraryEntry } from '../core/identify';
 import { SIMILARITY_METHODS } from '../core/similarity';
 import type { Comparison, Experiment, Lab, Lane, Marker, NormalisedLane } from '../core/types';
 import { EMPTY_META } from '../core/types';
@@ -10,6 +11,7 @@ export interface BackupContents {
   markers: Marker[];
   comparisons: Comparison[];
   labs: Lab[];
+  library: LibraryEntry[];
 }
 
 type Obj = Record<string, unknown>;
@@ -137,6 +139,12 @@ function lab(v: unknown): Lab {
   return { id: v.id, name: v.name, city: str(v.city), country: str(v.country) };
 }
 
+function libraryEntry(v: unknown): LibraryEntry {
+  need(isObj(v) && typeof v.id === 'string' && /^[^/]+\/[^/]+$/.test(v.id), 'a library entry has no lane reference');
+  need(typeof v.type === 'string' && v.type.trim() !== '', `library entry ${v.id} has no type`);
+  return { id: v.id, type: v.type.trim(), comments: str(v.comments), createdAt: isNum(v.createdAt) ? v.createdAt : Date.now() };
+}
+
 /** Checks a parsed backup file; throws an Error naming the first invalid record. */
 export function parseBackup(data: unknown): BackupContents {
   if (!isObj(data) || data.format !== 'gelj-web') throw new Error('This file is not a GelJ Web export.');
@@ -154,5 +162,7 @@ export function parseBackup(data: unknown): BackupContents {
     markers: parse('markers', marker).filter((m) => !m.builtin),
     comparisons: parse('comparisons', comparison),
     labs: parse('labs', lab),
+    // Absent in backups made before the reference library existed.
+    library: parse('library', libraryEntry),
   };
 }

@@ -83,7 +83,16 @@ async function rotatedLaneImage(n: NormalisedLane): Promise<string> {
   return url;
 }
 
-export function ComparePage({ experiments, labs }: { experiments: Experiment[]; labs: Lab[] }) {
+export function ComparePage({
+  experiments,
+  labs,
+  onIdentify,
+}: {
+  experiments: Experiment[];
+  labs: Lab[];
+  /** Identify the given lanes against the reference library. */
+  onIdentify?: (laneRefs: string[]) => void;
+}) {
   const complete = useMemo(() => experiments.filter((e) => e.status === 'complete'), [experiments]);
   const entries = useMemo(() => {
     const out: Entry[] = [];
@@ -494,6 +503,15 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                   title="Try a grid of tolerances and optimisations and pick the one giving the best dendrogram"
                 >
                   Optimise tolerance…
+                </button>
+              )}
+              {onIdentify && (
+                <button
+                  onClick={() => onIdentify(entries.filter((e) => selected.has(e.key) && !e.lane.isReference).map((e) => e.key))}
+                  disabled={selected.size === 0}
+                  title="Rank the closest lanes of the reference library for each selected lane"
+                >
+                  Identify
                 </button>
               )}
             </div>
