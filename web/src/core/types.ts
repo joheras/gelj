@@ -142,6 +142,8 @@ export interface Comparison {
   linkage: Linkage;
   /** Tolerance as a percentage of the molecular-weight range. */
   tolerance: number;
+  /** Optimisation: maximum shift between two lanes, in the units of the tolerance; absent = 0. */
+  optimisation?: number;
   output: OutputMode;
   fields: (keyof LaneMeta | 'experiment' | 'lane' | 'lab')[];
   comments: string;

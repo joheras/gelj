@@ -12,6 +12,7 @@ import { CLUSTER_COLOURS } from './clusterColours';
 import { Dendrogram, type DendroCut, type DendroLeaf } from './Dendrogram';
 import { svgToPngBlob, svgToString } from './svgexport';
 import { dataURLToGray, downloadBlob, downloadText, grayToPng, safeFilename } from './imageio';
+import { OptimisePanel } from './OptimisePanel';
 
 type Field = Comparison['fields'][number];
 
@@ -50,6 +51,8 @@ interface Result {
   coefficient: boolean;
   cophenetic: number;
   tolerance: number;
+  /** Absolute optimisation (maximum shift between two lanes), 0 = none. */
+  optimisation: number;
   leaves: DendroLeaf[];
   headers: string[];
   names: string[];
@@ -99,6 +102,8 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
   const [similarity, setSimilarity] = useState<SimilarityMethod>('Dice');
   const [linkage, setLinkage] = useState<Linkage>('UPGMA');
   const [tolerance, setTolerance] = useState(1);
+  const [optimisation, setOptimisation] = useState(0);
+  const [optimising, setOptimising] = useState(false);
   const [output, setOutput] = useState<OutputMode>('dendrogram+images+bands');
   const [fields, setFields] = useState<Field[]>(['lane', 'experiment', 'strain']);
   const [showValues, setShowValues] = useState(false);
@@ -146,6 +151,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
     const sim = opts?.similarity ?? similarity;
     const link = opts?.linkage ?? linkage;
     const tol = opts?.tolerance ?? tolerance;
+    const opt = opts?.optimisation ?? optimisation;
     const out = opts?.output ?? output;
     const flds = opts?.fields ?? fields;
     const cut = opts ? opts.cutoff : cutOn ? cutoff : null;
@@ -159,7 +165,8 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
     try {
       const lanes = chosen.map((e) => ({ mw: e.norm.mw, profile: e.norm.profile }));
       const tolAbs = mwTolerance(lanes, tol);
-      const dist = distanceMatrix(sim, lanes, tolAbs);
+      const optAbs = mwTolerance(lanes, opt);
+      const dist = distanceMatrix(sim, lanes, tolAbs, optAbs);
       const tree = cluster(dist, link);
       const withImages = out === 'dendrogram+images+bands' || out === 'dendrogram+images';
       const images = withImages ? await Promise.all(chosen.map((e) => rotatedLaneImage(e.norm))) : [];
@@ -169,7 +176,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
         positions: e.norm.positions.map((p) => p / e.norm.height),
       }));
       const headers = flds.map((f) => FIELDS.find(([k]) => k === f)?.[1] ?? f);
-      const tolText = isBandBased(sim) ? ` (tol. ${tol}%)` : '';
+      const tolText = isBandBased(sim) ? ` (tol. ${tol}%${opt > 0 ? `, opt. ${opt}%` : ''})` : '';
       bootToken.current++;
       setSupport(null);
       setBootProgress(null);
@@ -191,6 +198,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
         coefficient: isCoefficient(sim),
         cophenetic: copheneticCorrelation(dist, tree),
         tolerance: tolAbs,
+        optimisation: isBandBased(sim) ? optAbs : 0,
         leaves,
         headers,
         names: chosen.map((e) => `${e.exp.name} ${e.lane.name}`),
@@ -209,6 +217,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
     setSimilarity(c.similarity);
     setLinkage(c.linkage);
     setTolerance(c.tolerance);
+    setOptimisation(c.optimisation ?? 0);
     setOutput(c.output);
     setFields(c.fields);
     setSelected(new Set(c.laneRefs));
@@ -226,6 +235,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
       similarity,
       linkage,
       tolerance,
+      ...(optimisation > 0 ? { optimisation } : {}),
       output,
       fields,
       comments: '',
@@ -432,6 +442,12 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                 <input type="number" min={0} step={0.1} value={tolerance} onChange={(e) => setTolerance(Math.max(0, Number(e.target.value)))} />
               </label>
             )}
+            {isBandBased(similarity) && (
+              <label className="field">
+                <span>Optimisation (maximum shift between two lanes, same units)</span>
+                <input type="number" min={0} step={0.1} value={optimisation} onChange={(e) => setOptimisation(Math.max(0, Number(e.target.value)))} />
+              </label>
+            )}
             <label className="field">
               <span>Output</span>
               <select value={output} onChange={(e) => setOutput(e.target.value as OutputMode)}>
@@ -471,7 +487,36 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
               <button onClick={save} disabled={selected.size < 2}>
                 Save comparison
               </button>
+              {isBandBased(similarity) && (
+                <button
+                  onClick={() => setOptimising(true)}
+                  disabled={running || selected.size < 3}
+                  title="Try a grid of tolerances and optimisations and pick the one giving the best dendrogram"
+                >
+                  Optimise tolerance…
+                </button>
+              )}
             </div>
+            {optimising && (
+              <OptimisePanel
+                lanes={entries.filter((e) => selected.has(e.key)).map((e) => ({ mw: e.norm.mw, profile: [] }))}
+                method={similarity}
+                linkage={linkage}
+                cutoff={cutOn && (!result || result.coefficient) ? cutoff : 80}
+                groupOptions={FIELDS.filter(([k]) => k !== 'lane').map(([k, label]) => ({
+                  key: k,
+                  label,
+                  values: entries.filter((e) => selected.has(e.key)).map((e) => fieldValue(e, k)),
+                }))}
+                onApply={(t, o) => {
+                  setOptimising(false);
+                  setTolerance(t);
+                  setOptimisation(o);
+                  run({ tolerance: t, optimisation: o, cutoff: cutOn ? cutoff : null });
+                }}
+                onClose={() => setOptimising(false)}
+              />
+            )}
           </div>
           {saved.length > 0 && (
             <div className="card stack">
@@ -508,7 +553,8 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
               <div className="row" style={{ marginBottom: 8 }}>
                 <span className="small muted">
                   {result.entries.length} lanes · cophenetic correlation {result.cophenetic.toFixed(3)}
-                  {isBandBased(similarity) && ` · band tolerance ±${result.tolerance.toPrecision(3)}`}
+                  {isBandBased(result.similarity) && ` · band tolerance ±${result.tolerance.toPrecision(3)}`}
+                  {result.optimisation > 0 && ` · optimisation ±${result.optimisation.toPrecision(3)}`}
                 </span>
                 <span className="spacer" />
                 <label className="check small">
@@ -589,7 +635,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                   <>
                     <button onClick={() => svgRef.current && downloadText(`${base}.svg`, svgToString(svgRef.current), 'image/svg+xml')}>SVG</button>
                     <button onClick={async () => svgRef.current && downloadBlob(`${base}.png`, await svgToPngBlob(svgRef.current))}>PNG</button>
-                    <button onClick={() => downloadText(`${base}.nwk`, toNewick(result.tree, result.names, support ?? undefined), 'text/plain')}>
+                    <button onClick={() => downloadText(`${base}.nwk`, `[${result.title.replace(/[[\]]/g, '')}]${toNewick(result.tree, result.names, support ?? undefined)}`, 'text/plain')}>
                       Newick
                     </button>
                     {cut && <button onClick={exportClustersCsv}>Clusters CSV</button>}
@@ -599,7 +645,7 @@ export function ComparePage({ experiments, labs }: { experiments: Experiment[]; 
                 ) : (
                   <>
                     <button onClick={exportBandsCsv}>CSV</button>
-                    <button onClick={() => downloadText(`${base}-bands.nex`, bandMatrixNexus(result.matching, result.names), 'text/plain')} title="Binary matrix for PAUP*, SplitsTree, MrBayes…">
+                    <button onClick={() => downloadText(`${base}-bands.nex`, bandMatrixNexus(result.matching, result.names, result.title), 'text/plain')} title="Binary matrix for PAUP*, SplitsTree, MrBayes…">
                       NEXUS
                     </button>
                   </>

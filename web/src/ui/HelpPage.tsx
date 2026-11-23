@@ -64,6 +64,18 @@ export function HelpPage() {
               the data.
             </li>
             <li>
+              <b>Optimisation and tolerance</b> — the <i>tolerance</i> is the largest difference between two bands counted as the same band;
+              the <i>optimisation</i> (as in GelCompar II and BioNumerics) lets two whole lanes shift by up to that amount before their bands
+              are matched, compensating for lanes that ran slightly faster or slower. Both are percentages of the molecular-weight range.{' '}
+              <i>Optimise tolerance…</i> builds the dendrogram of the selected lanes for a grid of tolerances and optimisations and scores
+              each setting by the cophenetic correlation (how faithfully the dendrogram represents the similarities) and, if you choose a
+              field with known groups (e.g. MLST or a reference typing), by the adjusted Rand index between those groups and the clusters at
+              the cut-off (1 = identical, about 0 = chance). Lanes with an empty field are left out of the index. The heatmap and the curve
+              show the scores; ties go to the smallest optimisation and tolerance. <i>Apply and compare</i> uses the selected setting, which
+              is saved with the comparison and shown in the dendrogram title and export names. Band classes and the bootstrap ignore the
+              optimisation.
+            </li>
+            <li>
               <b>Band matching</b> — groups the bands of all compared lanes into band classes using the tolerance (two bands of the same lane
               are never in the same class). The table shows which lane has a band in each class; export it as CSV or as a NEXUS 0/1 matrix
               for PAUP*, SplitsTree, MrBayes, PAST or other population-genetics software.

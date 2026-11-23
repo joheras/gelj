@@ -34,19 +34,67 @@ export function isCoefficient(m: SimilarityMethod): boolean {
  * Maximum number of one-to-one pairs of bands (one of `a`, one of `b`) whose weights differ by at most
  * `tolerance`. Scanning both sorted lists is optimal for interval matching, and symmetric.
  */
-export function commonBands(a: number[], b: number[], tolerance: number): number {
-  const sa = a.filter(Number.isFinite).sort((x, y) => x - y);
-  const sb = b.filter(Number.isFinite).sort((x, y) => x - y);
+export function commonBands(a: number[], b: number[], tolerance: number, optimisation = 0): number {
+  return sortedCommonBands(sortedBands(a), sortedBands(b), tolerance, optimisation);
+}
+
+/** Finite band weights sorted ascending, as expected by sortedCommonBands. */
+export function sortedBands(mw: number[]): number[] {
+  return mw.filter(Number.isFinite).sort((x, y) => x - y);
+}
+
+/** commonBands on lists already sorted by sortedBands (avoids sorting again in repeated computations). */
+export function sortedCommonBands(sa: number[], sb: number[], tolerance: number, optimisation = 0): number {
+  return optimisation > 0 ? shiftedCommon(sa, sb, tolerance, optimisation) : sortedCommon(sa, sb, tolerance, 0);
+}
+
+/** commonBands on lists already sorted ascending, with the bands of `b` shifted by `shift`. */
+function sortedCommon(sa: number[], sb: number[], tolerance: number, shift: number): number {
   let common = 0;
+  // A small slack so that a shift computed as a difference of weights still matches exactly.
+  const tol = shift === 0 ? tolerance : tolerance + 1e-9 * (tolerance + Math.abs(shift));
   for (let i = 0, j = 0; i < sa.length && j < sb.length; ) {
-    if (Math.abs(sa[i] - sb[j]) <= tolerance) {
+    const v = sb[j] + shift;
+    if (Math.abs(sa[i] - v) <= tol) {
       common++;
       i++;
       j++;
-    } else if (sa[i] < sb[j]) i++;
+    } else if (sa[i] < v) i++;
     else j++;
   }
   return common;
+}
+
+/**
+ * Optimisation (as in GelCompar II / BioNumerics): the best number of common bands over every global
+ * shift of `b` relative to `a` of at most `optimisation`. The number of matches only changes where the
+ * shift brings two bands exactly `tolerance` apart, so it is enough to try those shifts (and 0, ±max).
+ * Symmetric: shifting `b` by s is shifting `a` by -s.
+ */
+function shiftedCommon(sa: number[], sb: number[], tolerance: number, optimisation: number): number {
+  let best = sortedCommon(sa, sb, tolerance, 0);
+  const limit = Math.min(sa.length, sb.length);
+  if (best === limit) return best;
+  const tried = new Set<number>([0]);
+  const tryShift = (s: number) => {
+    if (s < -optimisation || s > optimisation || tried.has(s)) return;
+    tried.add(s);
+    const c = sortedCommon(sa, sb, tolerance, s);
+    if (c > best) best = c;
+  };
+  tryShift(-optimisation);
+  tryShift(optimisation);
+  const reach = optimisation + tolerance;
+  for (let i = 0, j0 = 0; i < sa.length && best < limit; i++) {
+    // Only pairs of bands that can be brought within the tolerance give useful shifts.
+    while (j0 < sb.length && sb[j0] < sa[i] - reach) j0++;
+    for (let j = j0; j < sb.length && sb[j] <= sa[i] + reach && best < limit; j++) {
+      const d = sa[i] - sb[j];
+      tryShift(d - tolerance);
+      tryShift(d + tolerance);
+    }
+  }
+  return best;
 }
 
 /** Resample a profile to `n` points (linear interpolation). */
@@ -99,36 +147,42 @@ function sameValues(x: number[], y: number[]): boolean {
   return x.every((v, i) => v === y[i]);
 }
 
+/** Distance of a band-based coefficient for lanes with `b1` and `b2` bands (both > 0) and `c` common bands. */
+export function bandDistance(method: SimilarityMethod, b1: number, b2: number, c: number): number {
+  let s: number;
+  switch (method) {
+    case 'Dice':
+      s = (2 * c) / (b1 + b2);
+      break;
+    case 'Jaccard':
+      s = c / (b1 + b2 - c);
+      break;
+    case "Jeffrey's X":
+      s = (c / b1 + c / b2) / 2;
+      break;
+    case 'Ochiai':
+      s = c / Math.sqrt(b1 * b2);
+      break;
+    default: // Band difference
+      s = 1 - (b1 + b2 - 2 * c) / (b1 + b2 - c);
+  }
+  return 1 - s;
+}
+
 export function laneDistance(
   method: SimilarityMethod,
   l1: ComparableLane,
   l2: ComparableLane,
   tolerance: number,
+  /** Maximum global shift between the two lanes (band-based measures), in the units of `tolerance`. */
+  optimisation = 0,
 ): number {
   if (isBandBased(method)) {
     const b1 = l1.mw.length;
     const b2 = l2.mw.length;
     if (b1 === 0 && b2 === 0) return 0;
     if (b1 === 0 || b2 === 0) return 1;
-    const c = commonBands(l1.mw, l2.mw, tolerance);
-    let s: number;
-    switch (method) {
-      case 'Dice':
-        s = (2 * c) / (b1 + b2);
-        break;
-      case 'Jaccard':
-        s = c / (b1 + b2 - c);
-        break;
-      case "Jeffrey's X":
-        s = (c / b1 + c / b2) / 2;
-        break;
-      case 'Ochiai':
-        s = c / Math.sqrt(b1 * b2);
-        break;
-      default: // Band difference
-        s = 1 - (b1 + b2 - 2 * c) / (b1 + b2 - c);
-    }
-    return 1 - s;
+    return bandDistance(method, b1, b2, commonBands(l1.mw, l2.mw, tolerance, optimisation));
   }
   const n = Math.max(l1.profile.length, l2.profile.length);
   const x = resample(l1.profile, n);
@@ -167,13 +221,13 @@ export function mwTolerance(lanes: ComparableLane[], percent: number): number {
   return max >= min ? ((max - min) * percent) / 100 : 0;
 }
 
-export function distanceMatrix(method: SimilarityMethod, lanes: ComparableLane[], tolerance: number): number[][] {
+export function distanceMatrix(method: SimilarityMethod, lanes: ComparableLane[], tolerance: number, optimisation = 0): number[][] {
   const n = lanes.length;
   const d = Array.from({ length: n }, () => new Array<number>(n).fill(0));
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
       // Every measure is symmetric (band matching included), so each pair is computed once.
-      const v = laneDistance(method, lanes[i], lanes[j], tolerance);
+      const v = laneDistance(method, lanes[i], lanes[j], tolerance, optimisation);
       d[i][j] = v;
       d[j][i] = v;
     }
