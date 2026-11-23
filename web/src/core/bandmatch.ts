@@ -45,12 +45,12 @@ export function bandMatrixCsv(m: BandMatching, names: string[], extra: { header:
 }
 
 /** NEXUS data block with standard 0/1 characters (readable by PAUP*, SplitsTree, MrBayes, Mesquite…). */
-export function bandMatrixNexus(m: BandMatching, names: string[]): string {
+export function bandMatrixNexus(m: BandMatching, names: string[], note = ''): string {
   const q = (s: string) => `'${s.replace(/'/g, "''")}'`;
   const labels = m.classes.map((v) => q(`${formatMw(v)}`)).join(' ');
   return [
     '#NEXUS',
-    '[Band-matching table exported by GelJ Web: 1 = band present, 0 = absent]',
+    `[Band-matching table exported by GelJ Web${note ? ` (${note.replace(/[[\]]/g, '')})` : ''}: 1 = band present, 0 = absent]`,
     'BEGIN TAXA;',
     `  DIMENSIONS NTAX=${names.length};`,
     `  TAXLABELS ${names.map(q).join(' ')};`,

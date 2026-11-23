@@ -123,6 +123,7 @@ function comparison(v: unknown): Comparison {
     similarity: v.similarity as Comparison['similarity'],
     linkage: v.linkage as Comparison['linkage'],
     tolerance: isNum(v.tolerance) ? v.tolerance : 1,
+    ...(isNum(v.optimisation) && v.optimisation > 0 ? { optimisation: v.optimisation } : {}),
     output: (['dendrogram+images+bands', 'dendrogram+images', 'dendrogram+bands', 'dendrogram'] as const).includes(v.output as never)
       ? (v.output as Comparison['output'])
       : 'dendrogram+images+bands',

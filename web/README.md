@@ -28,6 +28,13 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
     shown on the dendrogram and written in the Newick export.
   - **Band matching**: band classes built with the comparison tolerance and the binary presence/absence
     matrix, exported as CSV or NEXUS for population-genetics and phylogenetics software.
+  - **Optimisation and tolerance analysis** (as in GelCompar II/BioNumerics): an optional *optimisation*
+    lets two lanes shift globally by up to that amount before their bands are matched, and *Optimise
+    tolerance…* rebuilds the dendrogram over a grid of tolerances and optimisations (in a background
+    worker), scoring each setting by the cophenetic correlation and, when a metadata field gives known
+    groups (e.g. MLST), by the adjusted Rand index between those groups and the cut-off clusters. The
+    scores are shown as a heatmap and a curve; the best setting is applied with one click, saved with the
+    comparison and written in the dendrogram title and exports.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -78,7 +85,9 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
 - Background subtraction shrinks the image earlier than ImageJ for large radii (the ball never exceeds
   8 px on the shrunk image), so results can differ by a few grey levels; ImageJ's options (sliding
   paraboloid, smoothing, separate background image) are not offered.
-- Cut-off clusters and bootstrap support are not available in the desktop version.
+- Cut-off clusters, bootstrap support, optimisation and the tolerance analysis are not available in the
+  desktop version. The optimisation shifts molecular weights (the units of the tolerance), while
+  GelCompar II shifts positions along the normalised lane; band classes and the bootstrap do not use it.
 
 See [docs/comparison.md](docs/comparison.md) for a comparison with GelJ desktop, GelCompar II/BioNumerics,
 PyElph, GelClust, GelAnalyzer, ImageJ/Fiji and GelGenie, and the list of proposed improvements.
