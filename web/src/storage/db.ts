@@ -1,6 +1,7 @@
 // Local persistence in IndexedDB. Everything stays in the user's browser.
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import { BUILTIN_MARKERS } from '../core/markers';
+import type { LibraryEntry } from '../core/identify';
 import type { Comparison, Experiment, Lab, Marker } from '../core/types';
 import { parseBackup } from './backup';
 
@@ -9,13 +10,14 @@ interface GelJDB extends DBSchema {
   markers: { key: string; value: Marker };
   comparisons: { key: string; value: Comparison };
   labs: { key: string; value: Lab };
+  library: { key: string; value: LibraryEntry };
 }
 
 let dbPromise: Promise<IDBPDatabase<GelJDB>> | null = null;
 
 function db() {
   if (!dbPromise) {
-    dbPromise = openDB<GelJDB>('gelj', 2, {
+    dbPromise = openDB<GelJDB>('gelj', 3, {
       upgrade(d, oldVersion) {
         if (oldVersion < 1) {
           d.createObjectStore('experiments', { keyPath: 'id' });
@@ -23,6 +25,7 @@ function db() {
           d.createObjectStore('comparisons', { keyPath: 'id' });
         }
         if (oldVersion < 2) d.createObjectStore('labs', { keyPath: 'id' });
+        if (oldVersion < 3) d.createObjectStore('library', { keyPath: 'id' });
       },
       // Another tab (or an older copy of the app) wants to upgrade the database: release it.
       blocking(_current, _next, event) {
@@ -106,6 +109,26 @@ export async function saveLab(lab: Lab): Promise<void> {
   changed();
 }
 
+/** Reference library, sorted by type name. Entries whose lane no longer exists are kept (and shown as missing). */
+export async function listLibrary(): Promise<LibraryEntry[]> {
+  const all = await (await db()).getAll('library');
+  return all.sort((a, b) => a.type.localeCompare(b.type) || a.createdAt - b.createdAt);
+}
+
+export async function saveLibraryEntries(entries: LibraryEntry[]): Promise<void> {
+  const tx = (await db()).transaction('library', 'readwrite');
+  for (const e of entries) await tx.store.put(e);
+  await tx.done;
+  changed();
+}
+
+export async function deleteLibraryEntries(ids: string[]): Promise<void> {
+  const tx = (await db()).transaction('library', 'readwrite');
+  for (const id of ids) await tx.store.delete(id);
+  await tx.done;
+  changed();
+}
+
 /** Deletes a lab and detaches it from the experiments that used it. */
 export async function deleteLab(id: string): Promise<void> {
   const d = await db();
@@ -149,6 +172,7 @@ export interface Backup {
   markers: Marker[];
   comparisons: Comparison[];
   labs?: Lab[];
+  library?: LibraryEntry[];
 }
 
 export async function exportBackup(experimentIds?: string[]): Promise<Backup> {
@@ -162,17 +186,20 @@ export async function exportBackup(experimentIds?: string[]): Promise<Backup> {
   const usedLabs = new Set(experiments.map((e) => e.labId));
   let labs = await d.getAll('labs');
   if (experimentIds) labs = labs.filter((l) => usedLabs.has(l.id));
-  return { format: 'gelj-web', version: 1, exportedAt: new Date().toISOString(), experiments, markers, comparisons, labs };
+  const exported = new Set(experiments.map((e) => e.id));
+  const library = (await d.getAll('library')).filter((r) => !experimentIds || exported.has(r.id.split('/')[0]));
+  return { format: 'gelj-web', version: 1, exportedAt: new Date().toISOString(), experiments, markers, comparisons, labs, library };
 }
 
-export async function importBackup(data: unknown): Promise<{ experiments: number; markers: number; comparisons: number; labs: number }> {
+export async function importBackup(data: unknown): Promise<{ experiments: number; markers: number; comparisons: number; labs: number; library: number }> {
   const b = parseBackup(data);
   const d = await db();
-  const tx = d.transaction(['experiments', 'markers', 'comparisons', 'labs'], 'readwrite');
+  const tx = d.transaction(['experiments', 'markers', 'comparisons', 'labs', 'library'], 'readwrite');
   for (const e of b.experiments) await tx.objectStore('experiments').put(e);
   for (const m of b.markers) await tx.objectStore('markers').put(m);
   for (const c of b.comparisons) await tx.objectStore('comparisons').put(c);
   for (const l of b.labs) await tx.objectStore('labs').put(l);
+  for (const r of b.library) await tx.objectStore('library').put(r);
   await tx.done;
   changed();
   return {
@@ -180,5 +207,6 @@ export async function importBackup(data: unknown): Promise<{ experiments: number
     markers: b.markers.length,
     comparisons: b.comparisons.length,
     labs: b.labs.length,
+    library: b.library.length,
   };
 }

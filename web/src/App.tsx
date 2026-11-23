@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
+import type { LibraryEntry } from './core/identify';
 import type { Experiment, Lab, Marker } from './core/types';
-import { getDefaultLabId, listExperiments, listLabs, listMarkers, onChange } from './storage/db';
+import { getDefaultLabId, listExperiments, listLabs, listLibrary, listMarkers, onChange } from './storage/db';
 import { ComparePage } from './ui/ComparePage';
 import { workFromExperiment, type WorkState } from './ui/experimentio';
 import { ExperimentsPage } from './ui/ExperimentsPage';
 import { ExperimentView } from './ui/ExperimentView';
 import { HelpPage } from './ui/HelpPage';
 import { LabsPage } from './ui/Labs';
+import { LibraryPage } from './ui/LibraryPage';
 import { MarkersPage } from './ui/MarkersPage';
 import { STEP_COUNT, Wizard } from './ui/Wizard';
 
@@ -15,6 +17,7 @@ type Route =
   | { page: 'experiment'; id: string }
   | { page: 'wizard'; work: WorkState; step: number }
   | { page: 'compare' }
+  | { page: 'library'; queries?: string[] }
   | { page: 'markers' }
   | { page: 'labs' }
   | { page: 'help' };
@@ -22,6 +25,7 @@ type Route =
 const TABS: [Route['page'], string][] = [
   ['experiments', 'Experiments'],
   ['compare', 'Compare'],
+  ['library', 'Library'],
   ['markers', 'Markers'],
   ['labs', 'Labs'],
   ['help', 'Help'],
@@ -29,7 +33,7 @@ const TABS: [Route['page'], string][] = [
 
 function routeFromHash(): Route {
   const h = window.location.hash.replace(/^#\/?/, '');
-  if (h === 'compare' || h === 'markers' || h === 'labs' || h === 'help') return { page: h };
+  if (h === 'compare' || h === 'library' || h === 'markers' || h === 'labs' || h === 'help') return { page: h };
   return { page: 'experiments' };
 }
 
@@ -38,13 +42,15 @@ export default function App() {
   const [experiments, setExperiments] = useState<Experiment[]>([]);
   const [markers, setMarkers] = useState<Marker[]>([]);
   const [labs, setLabs] = useState<Lab[]>([]);
+  const [library, setLibrary] = useState<LibraryEntry[]>([]);
   const [defaultLabId, setDefaultLab] = useState<string | null>(getDefaultLabId);
   const [toast, setToast] = useState<string | null>(null);
   const [loadingExp, setLoadingExp] = useState(false);
 
   const refresh = useCallback(async () => {
-    const [e, m, l] = await Promise.all([listExperiments(), listMarkers(), listLabs()]);
+    const [e, m, l, lib] = await Promise.all([listExperiments(), listMarkers(), listLabs(), listLibrary()]);
     setExperiments(e);
+    setLibrary(lib);
     setMarkers(m);
     setLabs(l);
     setDefaultLab(getDefaultLabId());
@@ -57,7 +63,8 @@ export default function App() {
 
   useEffect(() => {
     const onHash = () => {
-      setRoute((r) => (r.page === 'wizard' ? r : routeFromHash()));
+      // Same page: keep the route's state (the lanes to identify on the library page).
+      setRoute((r) => (r.page === 'wizard' || r.page === routeFromHash().page ? r : routeFromHash()));
     };
     window.addEventListener('hashchange', onHash);
     return () => window.removeEventListener('hashchange', onHash);
@@ -81,6 +88,12 @@ export default function App() {
     if (route.page === 'wizard' && !window.confirm('Leave the assistant? Unsaved changes will be lost.')) return;
     window.location.hash = page === 'experiments' ? '' : page;
     setRoute(page === 'experiment' || page === 'wizard' ? { page: 'experiments' } : { page });
+  };
+
+  /** Opens the library page identifying the given lanes (`${experimentId}/${laneId}`). */
+  const identifyLanes = (queries: string[]) => {
+    window.location.hash = 'library';
+    setRoute({ page: 'library', queries });
   };
 
   const openExperiment = async (e: Experiment, step?: number) => {
@@ -160,7 +173,9 @@ export default function App() {
               experiment={current}
               markers={markers}
               labs={labs}
+              library={library}
               notify={setToast}
+              onIdentify={identifyLanes}
               onBack={() => navigate('experiments')}
               onEdit={() => openExperiment(current, STEP_COUNT - 2)}
             />
@@ -170,7 +185,17 @@ export default function App() {
         ) : (
           <div className="page empty">Loading…</div>
         ))}
-      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} />}
+      {route.page === 'compare' && <ComparePage experiments={experiments} labs={labs} onIdentify={identifyLanes} />}
+      {route.page === 'library' && (
+        <LibraryPage
+          key={route.queries?.join() ?? ''}
+          experiments={experiments}
+          labs={labs}
+          library={library}
+          initialQueries={route.queries}
+          notify={setToast}
+        />
+      )}
       {route.page === 'markers' && <MarkersPage markers={markers} experiments={experiments} />}
       {route.page === 'labs' && <LabsPage labs={labs} experiments={experiments} defaultLabId={defaultLabId} />}
       {route.page === 'help' && <HelpPage />}

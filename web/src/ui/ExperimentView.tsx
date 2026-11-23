@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { LibraryEntry } from '../core/identify';
 import { labLabel, type Experiment, type Lab, type Lane, type Marker } from '../core/types';
 import { saveExperiment } from '../storage/db';
 import { downloadText, safeFilename } from './imageio';
@@ -9,12 +10,15 @@ interface Props {
   experiment: Experiment;
   markers: Marker[];
   labs: Lab[];
+  library: LibraryEntry[];
   onBack: () => void;
   onEdit: () => void;
   notify: (msg: string) => void;
+  /** Identify lanes (`${experimentId}/${laneId}`) against the reference library. */
+  onIdentify: (laneRefs: string[]) => void;
 }
 
-export function ExperimentView({ experiment, markers, labs, onBack, onEdit, notify }: Props) {
+export function ExperimentView({ experiment, markers, labs, library, onBack, onEdit, notify, onIdentify }: Props) {
   const [lanes, setLanes] = useState<Lane[]>(experiment.lanes);
   const [name, setName] = useState(experiment.name);
   const [comments, setComments] = useState(experiment.comments);
@@ -24,6 +28,8 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
   const lab = labs.find((l) => l.id === labId);
   const marker = markers.find((m) => m.id === experiment.markerId);
   const H = 360;
+  const libraryType = (l: Lane) => library.find((r) => r.id === `${experiment.id}/${l.id}`)?.type;
+  const sampleLanes = lanes.filter((l) => !l.isReference && experiment.normalised.some((n) => n.laneId === l.id));
 
   const save = async () => {
     await saveExperiment({ ...experiment, name: name.trim() || experiment.name, comments, lanes, labId });
@@ -55,6 +61,13 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
         <div className="row">
           <button onClick={onEdit}>Edit analysis</button>
           <button onClick={exportBands}>Bands CSV</button>
+          <button
+            onClick={() => onIdentify(sampleLanes.map((l) => `${experiment.id}/${l.id}`))}
+            disabled={sampleLanes.length === 0}
+            title="Rank the closest lanes of the reference library for every lane of this gel"
+          >
+            Identify lanes
+          </button>
           <button className="primary" onClick={save} disabled={!dirty}>
             Save changes
           </button>
@@ -129,6 +142,7 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
                   <th>Lane</th>
                   <th>Bands</th>
                   <th>Molecular weights</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
@@ -137,10 +151,22 @@ export function ExperimentView({ experiment, markers, labs, onBack, onEdit, noti
                   return (
                     <tr key={l.id}>
                       <td>
-                        {l.name} {l.isReference && <span className="badge ref">ref</span>}
+                        {l.name} {l.isReference && <span className="badge ref">ref</span>}{' '}
+                        {libraryType(l) && (
+                          <span className="badge ok" title="Type in the reference library">
+                            {libraryType(l)}
+                          </span>
+                        )}
                       </td>
                       <td>{n?.mw.length ?? 0}</td>
                       <td className="muted">{n?.mw.map((v) => v.toPrecision(4)).join(', ')}</td>
+                      <td>
+                        {n && !l.isReference && (
+                          <button className="link" onClick={() => onIdentify([`${experiment.id}/${l.id}`])}>
+                            Identify
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

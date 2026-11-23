@@ -41,6 +41,14 @@ describe('backup import', () => {
     expect(e.normalised[0].mw[1]).toBeNaN();
     expect(b.labs).toEqual([]);
     expect(b.comparisons).toEqual([]);
+    expect(b.library).toEqual([]);
+  });
+
+  it('reads the reference library and rejects entries without a lane or a type', () => {
+    const b = parseBackup({ format: 'gelj-web', library: [{ id: 'e/l1', type: ' ST1 ', createdAt: 5 }] });
+    expect(b.library).toEqual([{ id: 'e/l1', type: 'ST1', comments: '', createdAt: 5 }]);
+    expect(() => parseBackup({ format: 'gelj-web', library: [{ id: 'e', type: 'A' }] })).toThrow(/library record #1/);
+    expect(() => parseBackup({ format: 'gelj-web', library: [{ id: 'e/l', type: '' }] })).toThrow(/no type/);
   });
 
   it('marks complete experiments without normalised lanes as drafts and drops built-in markers', () => {

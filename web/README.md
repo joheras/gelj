@@ -28,6 +28,14 @@ as JSON backups. It is designed to be hosted as a static site on GitHub Pages.
     shown on the dendrogram and written in the Newick export.
   - **Band matching**: band classes built with the comparison tolerance and the binary presence/absence
     matrix, exported as CSV or NEXUS for population-genetics and phylogenetics software.
+- **Reference library and identification** (as GelJ's similarity search, BioNumerics identification or
+  CLIQS reference libraries): mark lanes of complete experiments as references of a type (pulsotype,
+  ribotype, species…, typed or taken from the lane metadata), list, filter, rename and remove them, and
+  identify one or many lanes — from the *Library* page, the experiment page or the comparison page — by
+  ranking the library with any similarity measure, tolerance and optional cut-off. Results show the
+  similarity, matched and unmatched bands, the closest reference of another type and the lane next to
+  its best matches; a batch summary and the ranked matches are exported as CSV. The library is kept in
+  IndexedDB and in JSON backups.
 - **Markers** shipped with GelJ plus user-defined markers.
 - **Laboratories** (name, city, country) assigned to experiments, as in GelJ where each user belonged to a
   lab. Your own lab is preselected for new experiments; labs can label dendrograms, filter lanes and are
@@ -50,7 +58,7 @@ npm run build    # static build in dist/
 - `src/core/` — algorithms ported from the Java version, independent of the UI:
   image operations, peak finding (ImageJ `MaximumFinder`), lane/band detection, curve fitting,
   spline, normalisation, similarity measures and clustering, background subtraction and filters,
-  band matching, dendrogram cut-off and bootstrap.
+  band matching, dendrogram cut-off and bootstrap, identification against the reference library.
 - `src/storage/` — IndexedDB persistence and JSON import/export.
 - `src/ui/` — React interface.
 

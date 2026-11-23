@@ -48,7 +48,7 @@ export function ExperimentsPage({ experiments, markers, labs, onNew, onOpen, not
     setError(null);
     try {
       const res = await importBackup(JSON.parse(await file.text()));
-      notify(`Imported ${res.experiments} experiments, ${res.markers} markers, ${res.labs} laboratories and ${res.comparisons} comparisons.`);
+      notify(`Imported ${res.experiments} experiments, ${res.markers} markers, ${res.labs} laboratories, ${res.comparisons} comparisons and ${res.library} reference-library entries.`);
     } catch (e) {
       setError(`Import failed: ${(e as Error).message}`);
     }
