@@ -82,3 +82,6 @@ The workflow `.github/workflows/deploy-web.yml` (at the repository root) builds 
 
 See [docs/comparison.md](docs/comparison.md) for a comparison with GelJ desktop, GelCompar II/BioNumerics,
 PyElph, GelClust, GelAnalyzer, ImageJ/Fiji and GelGenie, and the list of proposed improvements.
+See [docs/market-comparison.md](docs/market-comparison.md) for a market comparison with open and commercial
+gel-analysis software (licences, prices, platforms, maintenance status, features), GelJ Web's positioning
+and a prioritised list of opportunities.
