@@ -25,6 +25,12 @@ const META: [keyof Lane['meta'], string][] = [
   ['comments', 'Comments'],
 ];
 
+const LAYOUTS: Record<NonNullable<Experiment['bandTable']>['layout'], string> = {
+  long: 'one row per band',
+  wide: 'one row per lane',
+  matrix: 'band-matching (presence/absence) table',
+};
+
 const mwText = (v: number) => (Number.isFinite(v) ? String(Number(v.toPrecision(4))) : '–');
 
 /** Printable report of an analysed gel: images, preprocessing, lanes, normalisation and bands. */
@@ -61,8 +67,22 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
   const totalBands = lanes.filter((l) => !l.isReference).reduce((s, l) => s + (normOf(l)?.mw.length ?? 0), 0);
   const steps = e.preprocessing;
   const sameImage = e.originalImage === e.image;
+  // Experiments imported from a band table have no gel image, preprocessing or marker: their lanes are drawn from the bands.
+  const imported = e.bandTable;
+  let sectionNo = 0;
+  const title = (t: string) => `${++sectionNo}. ${t}`;
 
-  const methods = [
+  const importedMethods = imported
+    ? [
+        `Band data for ${lanes.length} lanes were imported into ${BUILD.name} ${BUILD.version}${BUILD.commit ? ` (commit ${BUILD.commit})` : ''} from ${imported.file || 'a band table'} (${LAYOUTS[imported.layout]}).`,
+        imported.values === 'mw'
+          ? 'Band values are molecular weights as exported by the source software.'
+          : 'Band values are positions in % of a normalised gel, comparable only with lanes of the same reference system.',
+        `The ${totalBands} bands were not re-detected or re-normalised in GelJ Web.`,
+      ].join(' ')
+    : '';
+
+  const methods = imported ? importedMethods : [
     `The gel image was analysed with ${BUILD.name} ${BUILD.version}${BUILD.commit ? ` (commit ${BUILD.commit})` : ''}.`,
     steps && steps.length > 0 ? `It was preprocessed as follows: ${steps.map(describeStep).map(lower).join('; ')}.` : '',
     `${lanes.length} lanes were defined (${refs.length} reference lane${refs.length === 1 ? '' : 's'}) on a ${e.darkBackground ? 'dark' : 'light'} background.`,
@@ -76,29 +96,45 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
 
   return (
     <ReportShell
-      kind="Gel analysis report"
+      kind={imported ? 'Band table report' : 'Gel analysis report'}
       title={e.name}
       generated={generated}
       ready={sums !== null}
       note={unsaved ? 'The report includes changes that are not saved yet.' : undefined}
       onClose={onClose}
     >
-      <ReportSection title="1. Experiment">
+      <ReportSection title={title('Experiment')}>
         <KeyValues
           rows={[
             ['Experiment', e.name],
             ['Laboratory', lab ? labLabel(lab) : 'Not recorded'],
             ['Created', formatDateTime(new Date(e.createdAt))],
             ['Last modified', formatDateTime(new Date(e.updatedAt))],
-            ['Status', e.status === 'complete' ? 'Analysis complete' : 'Draft'],
-            ['Background', e.darkBackground ? 'Dark (bright bands)' : 'Light (dark bands)'],
+            ['Status', imported ? 'Imported from a band table' : e.status === 'complete' ? 'Analysis complete' : 'Draft'],
+            ...(imported ? [] : ([['Background', e.darkBackground ? 'Dark (bright bands)' : 'Light (dark bands)']] as [string, ReactNode][])),
             ['Lanes', `${lanes.length} (${refs.length} reference, ${lanes.length - refs.length} samples)`],
             ['Comments', e.comments || '—'],
           ]}
         />
       </ReportSection>
 
-      <ReportSection title="2. Gel image">
+      {imported ? (
+        <ReportSection title={title('Source')}>
+          <KeyValues
+            rows={[
+              ['File', imported.file || '—'],
+              ['Layout', LAYOUTS[imported.layout]],
+              ['Band values', imported.values === 'mw' ? 'Molecular weights' : 'Positions in % of a normalised gel'],
+            ]}
+          />
+          <p className="report-note">
+            The data come from another program (e.g. GelCompar II, BioNumerics, GelJ or a spreadsheet): there is no gel image, preprocessing or
+            marker normalisation in GelJ Web. Lane images are drawn from the imported bands.
+          </p>
+        </ReportSection>
+      ) : (
+        <>
+      <ReportSection title={title('Gel image')}>
         <div className="report-figures">
           <figure>
             <img
@@ -119,7 +155,7 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
         </div>
       </ReportSection>
 
-      <ReportSection title="3. Preprocessing">
+      <ReportSection title={title('Preprocessing')}>
         {steps === undefined ? (
           <p className="report-note">
             Not recorded: this experiment was analysed before GelJ Web recorded the preprocessing operations
@@ -135,8 +171,10 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
           </ol>
         )}
       </ReportSection>
+        </>
+      )}
 
-      <ReportSection title="4. Lanes">
+      <ReportSection title={title('Lanes')}>
         <table className="report-table">
           <thead>
             <tr>
@@ -146,8 +184,12 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
                 <th key={k}>{label}</th>
               ))}
               <th>Bands</th>
-              <th title="Detection threshold (0–255)">Thr.</th>
-              <th>Position x, y, w×h (px)</th>
+              {!imported && (
+                <>
+                  <th title="Detection threshold (0–255)">Thr.</th>
+                  <th>Position x, y, w×h (px)</th>
+                </>
+              )}
             </tr>
           </thead>
           <tbody>
@@ -159,17 +201,22 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
                   <td key={k}>{l.meta[k]}</td>
                 ))}
                 <td className="num">{normOf(l)?.mw.length ?? l.bands.length}</td>
-                <td className="num">{l.threshold}</td>
-                <td className="num nowrap">
-                  {Math.round(l.rect.x)}, {Math.round(l.rect.y)}, {Math.round(l.rect.w)}×{Math.round(l.rect.h)}
-                </td>
+                {!imported && (
+                  <>
+                    <td className="num">{l.threshold}</td>
+                    <td className="num nowrap">
+                      {Math.round(l.rect.x)}, {Math.round(l.rect.y)}, {Math.round(l.rect.w)}×{Math.round(l.rect.h)}
+                    </td>
+                  </>
+                )}
               </tr>
             ))}
           </tbody>
         </table>
       </ReportSection>
 
-      <ReportSection title="5. Marker and migration model">
+      {!imported && (
+      <ReportSection title={title('Marker and migration model')}>
         <KeyValues
           rows={[
             ['Reference lanes', refs.map((l) => l.name).join(', ') || '—'],
@@ -219,16 +266,18 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
           </div>
         )}
       </ReportSection>
+      )}
 
-      <ReportSection title="6. Normalised gel" pageBreak>
+      <ReportSection title={title(imported ? 'Band diagram' : 'Normalised gel')} pageBreak>
         <NormalisedGel lanes={lanes} normalised={e.normalised} marker={marker} />
         <p className="report-note">
-          Lanes warped onto the marker reference lane. Ticks mark the detected bands (thick ticks: reference lanes); the scale on the left gives
-          the marker molecular weights.
+          {imported
+            ? 'Lanes drawn from the imported bands; ticks mark the bands.'
+            : 'Lanes warped onto the marker reference lane. Ticks mark the detected bands (thick ticks: reference lanes); the scale on the left gives the marker molecular weights.'}
         </p>
       </ReportSection>
 
-      <ReportSection title="7. Bands">
+      <ReportSection title={title('Bands')}>
         <div className="report-bands">
           {lanes.map((l) => {
             const n = normOf(l);
@@ -269,11 +318,11 @@ export function ExperimentReport({ experiment: e, marker, lab, unsaved, onClose 
         <p className="report-note">Positions are measured from the top of the normalised lane ({e.normalised[0]?.height ?? '–'} px long).</p>
       </ReportSection>
 
-      <ReportSection title="8. Image checksums">
+      <ReportSection title={title('Image checksums')}>
         <ChecksumTable images={shownImages} sums={sums} />
       </ReportSection>
 
-      <ReportSection title="9. Suggested methods text">
+      <ReportSection title={title('Suggested methods text')}>
         <p className="report-methods">{methods}</p>
       </ReportSection>
     </ReportShell>
